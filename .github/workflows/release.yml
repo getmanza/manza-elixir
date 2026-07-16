@@ -1,0 +1,76 @@
+name: Release
+
+# Tag-driven release. Hex.pm has no OIDC trusted publishing, so this is the
+# closest equivalent: a short-lived-as-possible HEX_API_KEY repository secret,
+# gated behind the `hex` GitHub environment (add required reviewers there for
+# a human approval step), plus a GitHub release.
+#
+# One-time setup: generate a publish key (`mix hex.user key generate
+# --permission api:write`) and store it as the HEX_API_KEY secret on the
+# `hex` environment.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27"
+          elixir-version: "1.18"
+      - name: Fetch cassettes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/fetch-cassettes.sh
+      - run: mix deps.get
+      - run: mix format --check-formatted
+      - run: mix test
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: hex
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27"
+          elixir-version: "1.18"
+      - name: Verify tag matches package version
+        run: |
+          PKG_VERSION=$(grep -o 'version: "[^"]*"' mix.exs | head -1 | cut -d'"' -f2)
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          if [[ "$TAG_VERSION" != "$PKG_VERSION" ]]; then
+            echo "Tag v$TAG_VERSION does not match mix.exs version $PKG_VERSION" >&2
+            exit 1
+          fi
+      - run: mix deps.get
+      - run: mix hex.publish --yes
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+
+  github-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          gh release create "$tag" --title "$tag" \
+            --notes "See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md)."
