@@ -47,15 +47,17 @@ jobs:
         with:
           otp-version: "27"
           elixir-version: "1.18"
+      - run: mix deps.get
       - name: Verify tag matches package version
+        # Ask Mix itself — mix.exs declares the version via a @version module
+        # attribute, which a mix.exs grep can't see reliably.
         run: |
-          PKG_VERSION=$(grep -o 'version: "[^"]*"' mix.exs | head -1 | cut -d'"' -f2)
+          PKG_VERSION=$(mix run --no-start --no-compile -e 'IO.puts(Mix.Project.config()[:version])' | tail -1)
           TAG_VERSION="${GITHUB_REF#refs/tags/v}"
           if [[ "$TAG_VERSION" != "$PKG_VERSION" ]]; then
             echo "Tag v$TAG_VERSION does not match mix.exs version $PKG_VERSION" >&2
             exit 1
           fi
-      - run: mix deps.get
       - run: mix hex.publish --yes
         env:
           HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
