@@ -9,7 +9,7 @@ defmodule Zazu.PaymentLinks do
   ## Options
 
     * `:status` — filter by link status.
-    * `:link_type` — filter by link type (`"single"` / `"multiple"`).
+    * `:link_type` — filter by link type (`"single"` / `"reusable"`).
     * `:limit` — page size (1..100, default 100).
     * `:cursor` — pagination cursor.
   """
