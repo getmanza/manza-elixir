@@ -234,6 +234,9 @@ defmodule Zazu.ResourcesTest do
           fixture_id("ZAZU_FIXTURE_AUTHORIZABLE_CLIENT_REFERENCE")
         )
 
+      # Replay strips `signature` before matching (it signs the real nonce
+      # under the real secret), so this does not prove the signer; the
+      # fixed vectors in transfer_authorization_test.exs do.
       signature = Zazu.TransferAuthorization.sign("replay-secret", input)
 
       assert {:ok, resp} =

@@ -5,7 +5,7 @@ defmodule Zazu.TransferDrafts do
   Creating a transfer draft never executes a transfer by itself. A draft
   inside the entity's machine-authorization envelope (trusted payee, within
   limits) is sent to the enrolled transfer authorizer as a
-  `payment.authorization_requested` webhook; answer it with `authorize/5` or
+  `payment.authorization_requested` webhook; answer it with `authorize/4` or
   `decline/4`, using an API key other than the one that created the draft.
   Every other draft goes to the in-app approval flow, where a manager or legal
   representative approves it. Poll `get/2` (status: `requested` →

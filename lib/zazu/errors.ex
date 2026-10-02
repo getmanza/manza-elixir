@@ -128,7 +128,12 @@ defmodule Zazu.Error do
 end
 
 defmodule Zazu.ConfigurationError do
-  @moduledoc "Returned by `Zazu.new/1` when the client can't be built."
+  @moduledoc """
+  Returned when the SDK refuses a value before any request is sent: by
+  `Zazu.new/1` when the client can't be built, and by resource functions
+  for an argument the API would reject (a `limit` over 100, a blank
+  authorization signature).
+  """
 
   defexception [:message]
 
