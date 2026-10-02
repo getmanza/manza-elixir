@@ -28,7 +28,7 @@ For each failing check:
 
 1. `gh run view <run-id> --log-failed` — get the actual error
 2. Reproduce locally:
-   - Test failure → `MIX_ENV=test mix test test/zazu/<file>_test.exs`
+   - Test failure → `MIX_ENV=test mix test test/manza/<file>_test.exs`
    - Format failure → `mix format --check-formatted` (fix with `mix format`)
    - Missing cassettes → `scripts/fetch-cassettes.sh`
 3. Fix the root cause. Don't:

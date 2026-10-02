@@ -1,4 +1,4 @@
-defmodule Zazu.Response do
+defmodule Manza.Response do
   @moduledoc """
   A successful (2xx) API response.
 

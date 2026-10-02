@@ -1,4 +1,4 @@
-defmodule Zazu.TransferDrafts do
+defmodule Manza.TransferDrafts do
   @moduledoc """
   API-initiated transfers.
 
@@ -13,7 +13,7 @@ defmodule Zazu.TransferDrafts do
   `transfer.executed` webhook to follow execution.
   """
 
-  alias Zazu.Client
+  alias Manza.Client
 
   @doc """
   Calls `POST /api/transfer_drafts`.
@@ -28,11 +28,11 @@ defmodule Zazu.TransferDrafts do
   Optional attributes: `external_account_id`, `currency_code`,
   `payment_reference`, `internal_notes`, and `client_reference` (unique per
   entity, at most 128 characters; a duplicate returns
-  `{:error, %Zazu.Error{kind: :conflict}}` whose `payment_id` names the
+  `{:error, %Manza.Error{kind: :conflict}}` whose `payment_id` names the
   existing draft). The response carries `client_reference` and
   `authorization` (`%{"id", "status", "expires_at"}` or `nil`).
   """
-  @spec create(Client.t(), map()) :: {:ok, Zazu.Response.t()} | {:error, Exception.t()}
+  @spec create(Client.t(), map()) :: {:ok, Manza.Response.t()} | {:error, Exception.t()}
   def create(client, attributes) do
     Client.post(client, "api/transfer_drafts", attributes)
   end
@@ -44,7 +44,7 @@ defmodule Zazu.TransferDrafts do
   `requested` → `processing` → `completed` / `failed`) — the API never
   executes a transfer itself.
   """
-  @spec get(Client.t(), String.t()) :: {:ok, Zazu.Response.t()} | {:error, Exception.t()}
+  @spec get(Client.t(), String.t()) :: {:ok, Manza.Response.t()} | {:error, Exception.t()}
   def get(client, id) do
     Client.get(client, Client.encode_path(["api/transfer_drafts", id]))
   end
@@ -54,18 +54,18 @@ defmodule Zazu.TransferDrafts do
 
   Executes the draft. `authorization_id` comes from the
   `payment.authorization_requested` webhook; build `signature` with
-  `Zazu.TransferAuthorization`. Requires the `transfers:authorize` scope on a
+  `Manza.TransferAuthorization`. Requires the `transfers:authorize` scope on a
   key other than the draft's creator (otherwise 403 `same_key_forbidden`).
 
   A blank `signature` is refused locally with
-  `{:error, %Zazu.ConfigurationError{}}` before any HTTP call: the API counts
+  `{:error, %Manza.ConfigurationError{}}` before any HTTP call: the API counts
   it as a failed attempt, and five fail the challenge.
   """
   @spec authorize(Client.t(), String.t(), String.t(), String.t() | nil) ::
-          {:ok, Zazu.Response.t()} | {:error, Exception.t()}
+          {:ok, Manza.Response.t()} | {:error, Exception.t()}
   def authorize(client, id, authorization_id, signature) do
     if blank?(signature) do
-      {:error, %Zazu.ConfigurationError{message: "signature cannot be blank"}}
+      {:error, %Manza.ConfigurationError{message: "signature cannot be blank"}}
     else
       Client.post(client, Client.encode_path(["api/transfer_drafts", id, "authorize"]), %{
         "authorization_id" => authorization_id,
@@ -81,7 +81,7 @@ defmodule Zazu.TransferDrafts do
   (`"status" => "declined"`). `reason` is omitted from the request when `nil`.
   """
   @spec decline(Client.t(), String.t(), String.t(), String.t() | nil) ::
-          {:ok, Zazu.Response.t()} | {:error, Exception.t()}
+          {:ok, Manza.Response.t()} | {:error, Exception.t()}
   def decline(client, id, authorization_id, reason \\ nil) do
     body =
       if reason,

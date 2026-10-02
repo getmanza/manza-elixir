@@ -1,7 +1,7 @@
-defmodule Zazu.PaymentLinks do
+defmodule Manza.PaymentLinks do
   @moduledoc "Standalone payment links (not attached to an invoice)."
 
-  alias Zazu.Client
+  alias Manza.Client
 
   @doc """
   Calls `GET /api/payment_links`.
@@ -13,7 +13,7 @@ defmodule Zazu.PaymentLinks do
     * `:limit` — page size (1..100, default 100).
     * `:cursor` — pagination cursor.
   """
-  @spec list(Client.t(), keyword()) :: {:ok, Zazu.Page.t()} | {:error, Exception.t()}
+  @spec list(Client.t(), keyword()) :: {:ok, Manza.Page.t()} | {:error, Exception.t()}
   def list(client, opts \\ []) do
     Client.list_page(
       client,
@@ -24,7 +24,7 @@ defmodule Zazu.PaymentLinks do
   end
 
   @doc "Calls `GET /api/payment_links/:id`."
-  @spec get(Client.t(), String.t()) :: {:ok, Zazu.Response.t()} | {:error, Exception.t()}
+  @spec get(Client.t(), String.t()) :: {:ok, Manza.Response.t()} | {:error, Exception.t()}
   def get(client, id) do
     Client.get(client, Client.encode_path(["api/payment_links", id]))
   end
@@ -36,13 +36,13 @@ defmodule Zazu.PaymentLinks do
   gains `settled_at`, and `status` can be `"clearing"` while a payment
   settles.
   """
-  @spec create(Client.t(), map()) :: {:ok, Zazu.Response.t()} | {:error, Exception.t()}
+  @spec create(Client.t(), map()) :: {:ok, Manza.Response.t()} | {:error, Exception.t()}
   def create(client, attributes) do
     Client.post(client, "api/payment_links", attributes)
   end
 
   @doc "Calls `POST /api/payment_links/:id/cancel`."
-  @spec cancel(Client.t(), String.t()) :: {:ok, Zazu.Response.t()} | {:error, Exception.t()}
+  @spec cancel(Client.t(), String.t()) :: {:ok, Manza.Response.t()} | {:error, Exception.t()}
   def cancel(client, id) do
     Client.post(client, Client.encode_path(["api/payment_links", id, "cancel"]))
   end

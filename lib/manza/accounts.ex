@@ -1,7 +1,7 @@
-defmodule Zazu.Accounts do
+defmodule Manza.Accounts do
   @moduledoc "Accounts and their transactions."
 
-  alias Zazu.Client
+  alias Manza.Client
 
   @doc """
   Calls `GET /api/accounts`.
@@ -13,7 +13,7 @@ defmodule Zazu.Accounts do
     * `:limit` — page size (1..100, default 100).
     * `:cursor` — pagination cursor.
   """
-  @spec list(Client.t(), keyword()) :: {:ok, Zazu.Page.t()} | {:error, Exception.t()}
+  @spec list(Client.t(), keyword()) :: {:ok, Manza.Page.t()} | {:error, Exception.t()}
   def list(client, opts \\ []) do
     Client.list_page(
       client,
@@ -24,7 +24,7 @@ defmodule Zazu.Accounts do
   end
 
   @doc "Calls `GET /api/accounts/:id`."
-  @spec get(Client.t(), String.t()) :: {:ok, Zazu.Response.t()} | {:error, Exception.t()}
+  @spec get(Client.t(), String.t()) :: {:ok, Manza.Response.t()} | {:error, Exception.t()}
   def get(client, id) do
     Client.get(client, Client.encode_path(["api/accounts", id]))
   end
@@ -41,7 +41,7 @@ defmodule Zazu.Accounts do
     * `:cursor` — pagination cursor.
   """
   @spec list_transactions(Client.t(), String.t(), keyword()) ::
-          {:ok, Zazu.Page.t()} | {:error, Exception.t()}
+          {:ok, Manza.Page.t()} | {:error, Exception.t()}
   def list_transactions(client, account_id, opts \\ []) do
     Client.list_page(
       client,
@@ -53,7 +53,7 @@ defmodule Zazu.Accounts do
 
   @doc "Calls `GET /api/accounts/:account_id/transactions/:id`."
   @spec get_transaction(Client.t(), String.t(), String.t()) ::
-          {:ok, Zazu.Response.t()} | {:error, Exception.t()}
+          {:ok, Manza.Response.t()} | {:error, Exception.t()}
   def get_transaction(client, account_id, transaction_id) do
     Client.get(
       client,

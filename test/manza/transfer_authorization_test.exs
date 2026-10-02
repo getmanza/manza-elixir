@@ -1,12 +1,12 @@
-defmodule Zazu.TransferAuthorizationTest do
-  # Fixed test vector, shared by every SDK in the family (same as zazu-ruby's
-  # spec/zazu/transfer_authorization_spec.rb). The digests were computed with:
+defmodule Manza.TransferAuthorizationTest do
+  # Fixed test vector, shared by every SDK in the family (same as manza-ruby's
+  # spec/manza/transfer_authorization_spec.rb). The digests were computed with:
   #
   #   printf '%s' '<input>' | openssl dgst -sha256 -hmac 'whsec_test_vector_secret'
 
   use ExUnit.Case, async: true
 
-  alias Zazu.TransferAuthorization
+  alias Manza.TransferAuthorization
 
   @secret "whsec_test_vector_secret"
   @payment_id "0199a1b2-0000-7000-8000-000000000001"

@@ -1,4 +1,4 @@
-defmodule Zazu.TransferAuthorization do
+defmodule Manza.TransferAuthorization do
   @moduledoc """
   Signs a machine-authorization challenge for an API-created transfer draft.
   Pure functions, no HTTP.
@@ -7,22 +7,22 @@ defmodule Zazu.TransferAuthorization do
   and a one-time nonce. Build the signature input from your *own* record of
   the transfer (not the webhook's `signature_input`, which is there only to
   compare against), sign it with the authorizer endpoint's signing secret,
-  and pass the result to `Zazu.TransferDrafts.authorize/4`:
+  and pass the result to `Manza.TransferDrafts.authorize/4`:
 
       input =
-        Zazu.TransferAuthorization.signature_input(
+        Manza.TransferAuthorization.signature_input(
           draft["id"],
           nonce,
           draft["amount"],
           draft["currency_code"],
           draft["account_id"],
-          Zazu.TransferAuthorization.payee_for(external_account_id: draft["external_account_id"]),
+          Manza.TransferAuthorization.payee_for(external_account_id: draft["external_account_id"]),
           draft["client_reference"]
         )
 
-      signature = Zazu.TransferAuthorization.sign(signing_secret, input)
+      signature = Manza.TransferAuthorization.sign(signing_secret, input)
 
-      Zazu.TransferDrafts.authorize(client, draft["id"], authorization_id, signature)
+      Manza.TransferDrafts.authorize(client, draft["id"], authorization_id, signature)
 
   Argument errors raise `ArgumentError`: these are programming mistakes, not
   API outcomes.

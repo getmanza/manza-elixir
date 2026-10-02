@@ -59,7 +59,7 @@ For each logical unit:
 Create a test that demonstrates the expected behavior. Confirm it fails for the right reason:
 
 ```bash
-MIX_ENV=test mix test test/zazu/<file>_test.exs
+MIX_ENV=test mix test test/manza/<file>_test.exs
 ```
 
 ### 4.2 Minimum implementation
@@ -68,18 +68,18 @@ Project conventions:
 
 | Use | Instead of |
 |-----|-----------|
-| `Zazu.Client` (`get/post/patch/delete/list_page`) | hand-rolled `Req` calls |
-| `Zazu.Client.encode_path/1` | string-interpolated URLs |
-| `Zazu.Page` and `Zazu.Page.next/1` | manual cursor loop |
-| `%Zazu.Error{kind: :conflict}` etc. (match on `kind`) | status-code or message matching |
-| `Zazu.ConfigurationError` for arguments refused before a request | ad-hoc error tuples or raises |
+| `Manza.Client` (`get/post/patch/delete/list_page`) | hand-rolled `Req` calls |
+| `Manza.Client.encode_path/1` | string-interpolated URLs |
+| `Manza.Page` and `Manza.Page.next/1` | manual cursor loop |
+| `%Manza.Error{kind: :conflict}` etc. (match on `kind`) | status-code or message matching |
+| `Manza.ConfigurationError` for arguments refused before a request | ad-hoc error tuples or raises |
 | string-keyed snake_case maps, as-is | atomizing keys or auto-camelCasing |
 | ExUnit | other test runners |
 | `mix format` | hand-formatting |
-| `Zazu.Test.CassetteReplay.replay_client/2` (`test/support/cassette_replay.ex`) | mocking HTTP per test |
-| `Zazu.Test.FixtureIDs.fixture_id/1` (`test/support/fixture_ids.ex`) | hard-coded fixture ids |
+| `Manza.Test.CassetteReplay.replay_client/2` (`test/support/cassette_replay.ex`) | mocking HTTP per test |
+| `Manza.Test.FixtureIDs.fixture_id/1` (`test/support/fixture_ids.ex`) | hard-coded fixture ids |
 
-**Never call a live Zazu/Manza API** from tests, scripts or this session, not even staging (`https://ma.manza.dev`): it creates real transfers and approval requests for the team. Tests replay zazu-ruby's cassettes (`scripts/fetch-cassettes.sh`); only zazu-ruby records them. Load one cassette per test where method + URI collide (`authorize` vs `authorize_same_key`, `create` vs `create_duplicate`).
+**Never call a live Manza/Manza API** from tests, scripts or this session, not even staging (`https://ma.manza.dev`): it creates real transfers and approval requests for the team. Tests replay manza-ruby's cassettes (`scripts/fetch-cassettes.sh`); only manza-ruby records them. Load one cassette per test where method + URI collide (`authorize` vs `authorize_same_key`, `create` vs `create_duplicate`).
 
 ### 4.3 Refactor
 
@@ -158,7 +158,7 @@ git push -u origin $(git branch --show-current)
 
 gh pr create --title "feat(scope): brief description" --body "$(cat <<'EOF'
 ## Summary
-- Key change 1 — uses `Zazu.Page` from the SDK
+- Key change 1 — uses `Manza.Page` from the SDK
 - Key change 2
 
 Closes #<issue_number>
@@ -184,8 +184,8 @@ If you typed `` \` `` anywhere in the body, delete the backslash. The single-quo
 - [ ] Tests written before implementation.
 - [ ] `mix format --check-formatted` passes.
 - [ ] `mix test` passes (replaying cassettes, no live API call).
-- [ ] No hand-rolled HTTP: uses `Zazu.Client`.
-- [ ] A change to the cassette contract, the error model or the signer is coordinated with zazu-ruby (and zazu-ts).
+- [ ] No hand-rolled HTTP: uses `Manza.Client`.
+- [ ] A change to the cassette contract, the error model or the signer is coordinated with manza-ruby (and manza-ts).
 - [ ] `fable-validator` verdict is PASS or PASS WITH NOTES (Phase 6.5), and it is in the PR body.
 - [ ] Accepted risks (if any) are listed in the PR body.
 - [ ] PR created with description.

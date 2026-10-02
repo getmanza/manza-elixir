@@ -1,11 +1,31 @@
 # Changelog
 
-All notable changes to `zazu-elixir` are documented here.
+All notable changes to `manza-elixir` (formerly `zazu-elixir`) are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Changed
+
+- **Renamed zazu to manza.** The Hex package is now `manza`, the OTP app `:manza`, the modules `Manza.*`, the repo `getmanza/manza-elixir`. The version restarts under the new name at 1.0.0 (set by `bin/release` at release time)
+- Requests send the `Manza-Version` header (was `Zazu-Version`) and `User-Agent: manza-elixir/<version>`
+- Config reads `MANZA_API_KEY`, `MANZA_BASE_URL` and `MANZA_API_VERSION` first, then falls back to the old `ZAZU_*` names with a one-time deprecation warning per variable. The fallback stays for all of 1.x
+- Cassettes are fetched from `getmanza/manza-ruby`, pinned to `v1.0.0`; the fixture env vars are `MANZA_FIXTURE_*` (no fallback, dev-only)
+
+### Migration from `zazu` 0.x
+
+| Before | After |
+|---|---|
+| `{:zazu, "~> 0.3"}` | `{:manza, "~> 1.0"}` |
+| `Zazu.new(...)`, `Zazu.Accounts`, `%Zazu.Error{}`, ... | `Manza.new(...)`, `Manza.Accounts`, `%Manza.Error{}`, ... |
+| `Application.get_env(:zazu, ...)` | `Application.get_env(:manza, ...)` |
+| `ZAZU_API_KEY`, `ZAZU_BASE_URL`, `ZAZU_API_VERSION` | `MANZA_API_KEY`, `MANZA_BASE_URL`, `MANZA_API_VERSION` (old names still work in 1.x, with a warning) |
+
+Search and replace `Zazu` with `Manza` across your code; the API surface is otherwise unchanged.
+
+## [0.3.0] (as zazu-elixir)
 
 ### Added
 

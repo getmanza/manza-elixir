@@ -1,6 +1,6 @@
-defmodule Zazu.Error do
+defmodule Manza.Error do
   @moduledoc """
-  The API error envelope, mirroring the other Zazu SDKs' hierarchy:
+  The API error envelope, mirroring the other Manza SDKs' hierarchy:
   `{"error" => {"type" => ..., "message" => ..., "param" => ...}}`.
 
   Match on `:kind` instead of subclassing:
@@ -52,11 +52,11 @@ defmodule Zazu.Error do
 
   @impl true
   def message(%__MODULE__{param: param} = error) when is_binary(param) and param != "" do
-    "zazu: #{error.message} (#{error.status} #{error.kind}, param #{param})"
+    "manza: #{error.message} (#{error.status} #{error.kind}, param #{param})"
   end
 
   def message(%__MODULE__{} = error) do
-    "zazu: #{error.message} (#{error.status} #{error.kind})"
+    "manza: #{error.message} (#{error.status} #{error.kind})"
   end
 
   @doc false
@@ -127,10 +127,10 @@ defmodule Zazu.Error do
   defp default_message(status), do: Map.get(@reason_phrases, status, "HTTP #{status}")
 end
 
-defmodule Zazu.ConfigurationError do
+defmodule Manza.ConfigurationError do
   @moduledoc """
   Returned when the SDK refuses a value before any request is sent: by
-  `Zazu.new/1` when the client can't be built, and by resource functions
+  `Manza.new/1` when the client can't be built, and by resource functions
   for an argument the API would reject (a `limit` over 100, a blank
   authorization signature).
   """
@@ -140,10 +140,10 @@ defmodule Zazu.ConfigurationError do
   @type t :: %__MODULE__{message: String.t()}
 
   @impl true
-  def message(%__MODULE__{message: message}), do: "zazu: #{message}"
+  def message(%__MODULE__{message: message}), do: "manza: #{message}"
 end
 
-defmodule Zazu.ConnectionError do
+defmodule Manza.ConnectionError do
   @moduledoc "Wraps transport-level failures (timeouts, DNS, refused)."
 
   defexception [:message, :reason]
@@ -151,5 +151,5 @@ defmodule Zazu.ConnectionError do
   @type t :: %__MODULE__{message: String.t(), reason: Exception.t() | nil}
 
   @impl true
-  def message(%__MODULE__{message: message}), do: "zazu: connection error: #{message}"
+  def message(%__MODULE__{message: message}), do: "manza: connection error: #{message}"
 end

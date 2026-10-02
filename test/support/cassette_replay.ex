@@ -1,6 +1,6 @@
-defmodule Zazu.Test.CassetteReplay do
+defmodule Manza.Test.CassetteReplay do
   @moduledoc """
-  Reads VCR YAML cassettes (recorded by zazu-ruby) and serves them from a
+  Reads VCR YAML cassettes (recorded by manza-ruby) and serves them from a
   Bypass server so identical interactions replay against this SDK. The
   contract is enforced cross-language: every SDK that consumes the cassette
   tarball must replay the exact request shape.
@@ -22,7 +22,7 @@ defmodule Zazu.Test.CassetteReplay do
   Ruby's Psych writes non-UTF-8 bodies as base64 with the PRIMARY `!binary`
   tag (not the canonical `!!binary`), which yamerl rejects as an
   unrecognized node — so the tag is rewritten to a `binary_string` key
-  before parsing and base64-decoded ourselves, like zazu-go does.
+  before parsing and base64-decoded ourselves, like manza-go does.
   """
 
   import ExUnit.Assertions, only: [flunk: 1]
@@ -31,7 +31,7 @@ defmodule Zazu.Test.CassetteReplay do
 
   @doc """
   Loads the named cassettes (e.g. `"payment_links/list"`) and serves their
-  interactions from a Bypass server. Returns a `Zazu.Client` pointed at it.
+  interactions from a Bypass server. Returns a `Manza.Client` pointed at it.
   Unmatched requests get a 501, which fails the calling assertion.
 
   Options: `ignore_signature: true` drops the `"signature"` key from both
@@ -60,7 +60,7 @@ defmodule Zazu.Test.CassetteReplay do
       end
     end)
 
-    Zazu.new!(api_key: "test-api-key-for-replay", base_url: "http://localhost:#{bypass.port}")
+    Manza.new!(api_key: "test-api-key-for-replay", base_url: "http://localhost:#{bypass.port}")
   end
 
   defp load_cassette(name) do
