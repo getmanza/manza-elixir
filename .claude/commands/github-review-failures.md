@@ -50,11 +50,11 @@ mix format --check-formatted          # format (fix with: mix format)
 mix test                              # full suite
 ```
 
-Never reproduce a failure by calling a live Manza/Manza API. Replay cassettes only.
+Never reproduce a failure by calling a live Manza API. Replay cassettes only.
 
 If you can't reproduce locally, the failure is environmental (CI-only):
 - Different Elixir/OTP version → CI pins OTP 27 and Elixir 1.18 via `erlef/setup-beam` in `ci.yml` and `release.yml`; a newer local toolchain may format or warn differently
-- Stale cassettes → the tarball moves with every manza-ruby release; re-run `scripts/fetch-cassettes.sh`
+- Stale cassettes → `scripts/fetch-cassettes.sh` fetches the pinned `PINNED_TAG`; to pick up a newer manza-ruby release, bump `PINNED_TAG` (or pass the tag as an argument) and re-run it
 - Race condition → re-running the job fixes it
 - Network → GitHub (cassette tarball, `git ls-remote`) or Hex hiccup; the fetch script already retries
 - Secret missing → `HEX_API_KEY` not set on the `hex` environment of `getmanza/manza-elixir`

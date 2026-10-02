@@ -61,7 +61,7 @@ Manza.PayeeTrustRequests.create(client, [external_account_id])
 
 ## Critical rules
 
-- **Never call a live Manza/Manza API** from tests, scripts or Claude sessions. Tests replay manza-ruby's cassettes only. Live staging calls create real transfers and approval requests for the team. Only manza-ruby records cassettes.
+- **Never call a live Manza API** from tests, scripts or Claude sessions. Tests replay manza-ruby's cassettes only. Live staging calls create real transfers and approval requests for the team. Only manza-ruby records cassettes.
 - **`mix format --check-formatted` and `mix test` before every commit.** `scripts/release-check` and CI run the same.
 - **Cassette contract.**
   - Cassettes come from the manza-ruby release pinned in `scripts/fetch-cassettes.sh` (`PINNED_TAG`, `cassettes-vX.Y.Z.tar.gz`; bump it on purpose), extracted to `testdata/cassettes/` (gitignored). They are recorded against `https://ma.manza.dev`.

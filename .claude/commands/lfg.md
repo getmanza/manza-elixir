@@ -79,7 +79,7 @@ Project conventions:
 | `Manza.Test.CassetteReplay.replay_client/2` (`test/support/cassette_replay.ex`) | mocking HTTP per test |
 | `Manza.Test.FixtureIDs.fixture_id/1` (`test/support/fixture_ids.ex`) | hard-coded fixture ids |
 
-**Never call a live Manza/Manza API** from tests, scripts or this session, not even staging (`https://ma.manza.dev`): it creates real transfers and approval requests for the team. Tests replay manza-ruby's cassettes (`scripts/fetch-cassettes.sh`); only manza-ruby records them. Load one cassette per test where method + URI collide (`authorize` vs `authorize_same_key`, `create` vs `create_duplicate`).
+**Never call a live Manza API** from tests, scripts or this session, not even staging (`https://ma.manza.dev`): it creates real transfers and approval requests for the team. Tests replay manza-ruby's cassettes (`scripts/fetch-cassettes.sh`); only manza-ruby records them. Load one cassette per test where method + URI collide (`authorize` vs `authorize_same_key`, `create` vs `create_duplicate`).
 
 ### 4.3 Refactor
 
