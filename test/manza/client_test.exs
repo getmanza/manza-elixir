@@ -20,6 +20,8 @@ defmodule Manza.ClientTest do
         {name, nil} -> System.delete_env(name)
         {name, value} -> System.put_env(name, value)
       end)
+
+      Enum.each(@env_vars, &:persistent_term.erase({Manza.Client, :deprecated_env, &1}))
     end)
   end
 
