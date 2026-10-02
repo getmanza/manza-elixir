@@ -29,7 +29,12 @@ defmodule Zazu.Invoices do
     Client.get(client, Client.encode_path(["api/invoices", id]))
   end
 
-  @doc "Calls `POST /api/invoices`."
+  @doc """
+  Calls `POST /api/invoices`.
+
+  `tax_rate` must be the issuer's rate or 0, otherwise 422. The market-gated
+  `delivery_date` key is absent outside Morocco.
+  """
   @spec create(Client.t(), map()) :: {:ok, Zazu.Response.t()} | {:error, Exception.t()}
   def create(client, attributes) do
     Client.post(client, "api/invoices", attributes)

@@ -64,4 +64,59 @@ defmodule Zazu.ClientTest do
 
     assert {:error, %Zazu.Error{kind: :rate_limit, retry_after: 17}} = Zazu.Entity.get(client)
   end
+
+  describe "error kinds" do
+    defp error_for(status, body) do
+      bypass = Bypass.open()
+
+      Bypass.expect(bypass, fn conn ->
+        Plug.Conn.send_resp(conn, status, Jason.encode!(%{"error" => body}))
+      end)
+
+      client = Zazu.new!(api_key: "test", base_url: "http://localhost:#{bypass.port}")
+      {:error, %Zazu.Error{} = error} = Zazu.Entity.get(client)
+      error
+    end
+
+    test "400 maps to :validation" do
+      error =
+        error_for(400, %{"message" => "limit is malformed", "type" => "invalid_request_error"})
+
+      assert error.status == 400
+      assert error.kind == :validation
+      assert error.message == "limit is malformed"
+      assert error.type == "invalid_request_error"
+    end
+
+    test "409 maps to :conflict carrying error.payment_id" do
+      error =
+        error_for(409, %{
+          "message" => "A transfer with this client_reference already exists",
+          "type" => "duplicate_client_reference",
+          "param" => "client_reference",
+          "payment_id" => "pay_1"
+        })
+
+      assert error.status == 409
+      assert error.kind == :conflict
+      assert error.type == "duplicate_client_reference"
+      assert error.param == "client_reference"
+      assert error.payment_id == "pay_1"
+    end
+
+    test "payment_id stays nil when a 409 omits it" do
+      error = error_for(409, %{"message" => "Conflict"})
+
+      assert error.kind == :conflict
+      assert error.payment_id == nil
+    end
+  end
+
+  test "the default base URL is the production host" do
+    original = System.get_env("ZAZU_BASE_URL")
+    System.delete_env("ZAZU_BASE_URL")
+    on_exit(fn -> if original, do: System.put_env("ZAZU_BASE_URL", original) end)
+
+    assert Zazu.new!(api_key: "test").base_url == "https://ma.manza.finance"
+  end
 end

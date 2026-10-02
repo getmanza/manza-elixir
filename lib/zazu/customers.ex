@@ -23,7 +23,12 @@ defmodule Zazu.Customers do
     Client.get(client, Client.encode_path(["api/customers", id]))
   end
 
-  @doc "Calls `POST /api/customers`."
+  @doc """
+  Calls `POST /api/customers`.
+
+  Customers also carry `registration_number` and `vat_number`. The
+  market-gated `tax_id` and `ice_number` keys are absent outside Morocco.
+  """
   @spec create(Client.t(), map()) :: {:ok, Zazu.Response.t()} | {:error, Exception.t()}
   def create(client, attributes) do
     Client.post(client, "api/customers", attributes)

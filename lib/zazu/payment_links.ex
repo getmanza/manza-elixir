@@ -29,7 +29,13 @@ defmodule Zazu.PaymentLinks do
     Client.get(client, Client.encode_path(["api/payment_links", id]))
   end
 
-  @doc "Calls `POST /api/payment_links`."
+  @doc """
+  Calls `POST /api/payment_links`.
+
+  Optional: `collect_billing_address` and `billing_address`. The response
+  gains `settled_at`, and `status` can be `"clearing"` while a payment
+  settles.
+  """
   @spec create(Client.t(), map()) :: {:ok, Zazu.Response.t()} | {:error, Exception.t()}
   def create(client, attributes) do
     Client.post(client, "api/payment_links", attributes)

@@ -109,36 +109,261 @@ defmodule Zazu.ResourcesTest do
     assert {:ok, _resp} = Zazu.WebhookEndpoints.get(client, fixture_id("ZAZU_FIXTURE_WEBHOOK_ID"))
   end
 
-  test "transfer drafts" do
-    client = CassetteReplay.replay_client(["transfer_drafts/create", "transfer_drafts/get"])
+  describe "transfer drafts" do
+    test "create carries the client_reference" do
+      client = CassetteReplay.replay_client(["transfer_drafts/create"])
 
-    assert {:ok, resp} =
-             Zazu.TransferDrafts.create(client, %{
-               "account_id" => fixture_id("ZAZU_FIXTURE_ACCOUNT_ID"),
-               "beneficiary_id" => fixture_id("ZAZU_FIXTURE_BENEFICIARY_ID"),
-               "amount" => "150.00",
-               "payment_reference" => "SDK fixture"
-             })
+      assert {:ok, resp} =
+               Zazu.TransferDrafts.create(client, %{
+                 "account_id" => fixture_id("ZAZU_FIXTURE_ACCOUNT_ID"),
+                 "beneficiary_id" => fixture_id("ZAZU_FIXTURE_BENEFICIARY_ID"),
+                 "amount" => "150.00",
+                 "payment_reference" => "SDK fixture",
+                 "client_reference" => fixture_id("ZAZU_FIXTURE_CLIENT_REFERENCE")
+               })
 
-    assert resp.status == 201
-    # Awaiting in-app approval — the API never executes a transfer itself.
-    assert resp.body["status"] == "requested"
-    assert resp.body["transfer"] == nil
+      assert resp.status == 201
+      # Awaiting approval — the API never executes a transfer itself.
+      assert resp.body["status"] == "requested"
+      assert resp.body["client_reference"] == fixture_id("ZAZU_FIXTURE_CLIENT_REFERENCE")
+      assert Map.has_key?(resp.body, "authorization")
+      assert resp.body["transfer"] == nil
+    end
 
-    assert {:ok, got} =
-             Zazu.TransferDrafts.get(client, fixture_id("ZAZU_FIXTURE_TRANSFER_DRAFT_ID"))
+    test "create with a duplicate client_reference returns a conflict naming the draft" do
+      client = CassetteReplay.replay_client(["transfer_drafts/create_duplicate"])
 
-    assert is_binary(got.body["status"])
+      assert {:error, %Zazu.Error{} = error} =
+               Zazu.TransferDrafts.create(client, %{
+                 "account_id" => fixture_id("ZAZU_FIXTURE_ACCOUNT_ID"),
+                 "beneficiary_id" => fixture_id("ZAZU_FIXTURE_BENEFICIARY_ID"),
+                 "amount" => "10.00",
+                 "client_reference" => fixture_id("ZAZU_FIXTURE_AUTHORIZABLE_CLIENT_REFERENCE")
+               })
+
+      assert error.status == 409
+      assert error.kind == :conflict
+      assert error.type == "duplicate_client_reference"
+      assert error.payment_id == fixture_id("ZAZU_FIXTURE_AUTHORIZABLE_DRAFT_ID")
+    end
+
+    test "get" do
+      client = CassetteReplay.replay_client(["transfer_drafts/get"])
+
+      assert {:ok, got} =
+               Zazu.TransferDrafts.get(client, fixture_id("ZAZU_FIXTURE_TRANSFER_DRAFT_ID"))
+
+      assert is_binary(got.body["id"])
+      assert Map.has_key?(got.body, "status")
+      assert Map.has_key?(got.body, "transfer")
+    end
+
+    test "authorize refuses a blank signature without calling the API" do
+      {:ok, client} = Zazu.new(api_key: "test", base_url: "http://127.0.0.1:1")
+
+      for blank <- ["", " ", nil] do
+        assert {:error, %Zazu.ConfigurationError{message: message}} =
+                 Zazu.TransferDrafts.authorize(client, "draft", "auth", blank)
+
+        assert message =~ "signature"
+      end
+    end
+
+    test "decline omits reason when absent" do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "POST", "/api/transfer_drafts/d1/decline", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        assert Jason.decode!(body) == %{"authorization_id" => "a1"}
+        Plug.Conn.send_resp(conn, 200, ~s({"status":"declined"}))
+      end)
+
+      client = Zazu.new!(api_key: "test", base_url: "http://localhost:#{bypass.port}")
+      assert {:ok, _resp} = Zazu.TransferDrafts.decline(client, "d1", "a1")
+    end
+
+    # Order matters while recording (five consecutive bad signatures suspend
+    # the authorizer), not on replay. Each cassette loads on its own: the
+    # authorize cassettes share method + URI.
+    test "authorize with a bad signature is a validation error" do
+      client =
+        CassetteReplay.replay_client(["transfer_drafts/authorize_bad_signature"],
+          ignore_signature: true
+        )
+
+      assert {:error, %Zazu.Error{kind: :validation, type: "invalid_signature"}} =
+               Zazu.TransferDrafts.authorize(
+                 client,
+                 fixture_id("ZAZU_FIXTURE_BAD_SIGNATURE_DRAFT_ID"),
+                 fixture_id("ZAZU_FIXTURE_BAD_SIGNATURE_AUTHORIZATION_ID"),
+                 String.duplicate("0", 64)
+               )
+    end
+
+    test "authorize with the creating key is forbidden" do
+      client =
+        CassetteReplay.replay_client(["transfer_drafts/authorize_same_key"],
+          ignore_signature: true
+        )
+
+      assert {:error, %Zazu.Error{kind: :forbidden, type: "same_key_forbidden"}} =
+               Zazu.TransferDrafts.authorize(
+                 client,
+                 fixture_id("ZAZU_FIXTURE_AUTHORIZABLE_DRAFT_ID"),
+                 fixture_id("ZAZU_FIXTURE_AUTHORIZABLE_AUTHORIZATION_ID"),
+                 String.duplicate("0", 64)
+               )
+    end
+
+    test "authorize executes the draft" do
+      client =
+        CassetteReplay.replay_client(["transfer_drafts/authorize"], ignore_signature: true)
+
+      draft_id = fixture_id("ZAZU_FIXTURE_AUTHORIZABLE_DRAFT_ID")
+
+      input =
+        Zazu.TransferAuthorization.signature_input(
+          draft_id,
+          fixture_id("ZAZU_FIXTURE_AUTHORIZABLE_NONCE"),
+          "10.0",
+          "MAD",
+          fixture_id("ZAZU_FIXTURE_ACCOUNT_ID"),
+          Zazu.TransferAuthorization.payee_for(
+            external_account_id: fixture_id("ZAZU_FIXTURE_TRUSTED_EXTERNAL_ACCOUNT_ID")
+          ),
+          fixture_id("ZAZU_FIXTURE_AUTHORIZABLE_CLIENT_REFERENCE")
+        )
+
+      # Replay strips `signature` before matching (it signs the real nonce
+      # under the real secret), so this does not prove the signer; the
+      # fixed vectors in transfer_authorization_test.exs do.
+      signature = Zazu.TransferAuthorization.sign("replay-secret", input)
+
+      assert {:ok, resp} =
+               Zazu.TransferDrafts.authorize(
+                 client,
+                 draft_id,
+                 fixture_id("ZAZU_FIXTURE_AUTHORIZABLE_AUTHORIZATION_ID"),
+                 signature
+               )
+
+      assert resp.status == 200
+      assert resp.body["id"] == draft_id
+      assert resp.body["authorization"]["status"] == "authorized"
+    end
+
+    test "decline declines the challenge" do
+      client = CassetteReplay.replay_client(["transfer_drafts/decline"])
+
+      assert {:ok, resp} =
+               Zazu.TransferDrafts.decline(
+                 client,
+                 fixture_id("ZAZU_FIXTURE_DECLINABLE_DRAFT_ID"),
+                 fixture_id("ZAZU_FIXTURE_DECLINABLE_AUTHORIZATION_ID"),
+                 "SDK fixture"
+               )
+
+      assert resp.status == 200
+      assert resp.body["id"] == fixture_id("ZAZU_FIXTURE_DECLINABLE_AUTHORIZATION_ID")
+      assert resp.body["status"] == "declined"
+      assert is_binary(resp.body["declined_at"])
+    end
   end
 
-  test "beneficiaries" do
-    client = CassetteReplay.replay_client(["beneficiaries/list", "beneficiaries/get"])
+  describe "beneficiaries" do
+    test "list and get" do
+      client = CassetteReplay.replay_client(["beneficiaries/list", "beneficiaries/get"])
 
-    assert {:ok, page} = Zazu.Beneficiaries.list(client)
-    assert page.data != []
-    assert is_list(hd(page.data)["external_accounts"])
+      assert {:ok, page} = Zazu.Beneficiaries.list(client)
+      assert page.data != []
+      assert is_list(hd(page.data)["external_accounts"])
 
-    assert {:ok, resp} = Zazu.Beneficiaries.get(client, fixture_id("ZAZU_FIXTURE_BENEFICIARY_ID"))
-    assert is_binary(resp.body["id"])
+      assert {:ok, resp} =
+               Zazu.Beneficiaries.get(client, fixture_id("ZAZU_FIXTURE_BENEFICIARY_ID"))
+
+      assert is_binary(resp.body["id"])
+      assert is_list(resp.body["external_accounts"])
+    end
+
+    test "create" do
+      client = CassetteReplay.replay_client(["beneficiaries/create"])
+
+      assert {:ok, resp} =
+               Zazu.Beneficiaries.create(client, %{
+                 "beneficiary_type" => "business",
+                 "company_name" => "Zazu Fixture Beneficiary - spec (zazu-ruby-fixture)",
+                 "email" => "fixture-beneficiary-spec@example.com"
+               })
+
+      assert resp.status == 201
+      assert resp.body["beneficiary_type"] == "business"
+      assert resp.body["external_accounts"] == []
+    end
+
+    test "list_external_accounts returns a page of bank accounts" do
+      client = CassetteReplay.replay_client(["beneficiaries/list_external_accounts"])
+
+      assert {:ok, %Zazu.Page{} = page} =
+               Zazu.Beneficiaries.list_external_accounts(
+                 client,
+                 fixture_id("ZAZU_FIXTURE_CREATED_BENEFICIARY_ID")
+               )
+
+      assert hd(page.data)["id"] == fixture_id("ZAZU_FIXTURE_EXTERNAL_ACCOUNT_ID")
+      assert is_binary(hd(page.data)["account_number"])
+    end
+
+    test "get_external_account" do
+      client = CassetteReplay.replay_client(["beneficiaries/get_external_account"])
+
+      assert {:ok, resp} =
+               Zazu.Beneficiaries.get_external_account(
+                 client,
+                 fixture_id("ZAZU_FIXTURE_CREATED_BENEFICIARY_ID"),
+                 fixture_id("ZAZU_FIXTURE_EXTERNAL_ACCOUNT_ID")
+               )
+
+      assert resp.body["id"] == fixture_id("ZAZU_FIXTURE_EXTERNAL_ACCOUNT_ID")
+      assert Map.has_key?(resp.body, "default")
+    end
+
+    test "create_external_account" do
+      client = CassetteReplay.replay_client(["beneficiaries/create_external_account"])
+
+      assert {:ok, resp} =
+               Zazu.Beneficiaries.create_external_account(
+                 client,
+                 fixture_id("ZAZU_FIXTURE_CREATED_BENEFICIARY_ID"),
+                 %{
+                   "account_number" => fixture_id("ZAZU_FIXTURE_NEW_ACCOUNT_NUMBER"),
+                   "name" => "Fixture Secondary Account"
+                 }
+               )
+
+      assert resp.status == 201
+      assert resp.body["name"] == "Fixture Secondary Account"
+      assert resp.body["default"] == false
+    end
+  end
+
+  describe "payee trust requests" do
+    test "create files a pending trust request" do
+      client = CassetteReplay.replay_client(["payee_trust_requests/create"])
+      ext_id = fixture_id("ZAZU_FIXTURE_EXTERNAL_ACCOUNT_ID")
+
+      assert {:ok, resp} = Zazu.PayeeTrustRequests.create(client, [ext_id])
+      assert resp.status == 201
+      assert resp.body["status"] == "pending"
+      assert resp.body["external_account_ids"] == [ext_id]
+    end
+
+    test "get" do
+      client = CassetteReplay.replay_client(["payee_trust_requests/get"])
+      id = fixture_id("ZAZU_FIXTURE_PAYEE_TRUST_REQUEST_ID")
+
+      assert {:ok, resp} = Zazu.PayeeTrustRequests.get(client, id)
+      assert resp.body["id"] == id
+      assert resp.body["resolved_at"] == nil
+    end
   end
 end
