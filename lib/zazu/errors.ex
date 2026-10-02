@@ -8,7 +8,9 @@ defmodule Zazu.Error do
     * `:authentication` — 401
     * `:forbidden` — 403
     * `:not_found` — 404
-    * `:validation` — 422
+    * `:validation` — 400 (malformed request) or 422
+    * `:conflict` — 409 (`:payment_id` names the existing transfer draft on a
+      duplicate `client_reference`)
     * `:rate_limit` — 429 (`:retry_after` carries the `Retry-After` seconds)
     * `:server` — 5xx
     * `:api` — any other non-2xx
@@ -22,11 +24,19 @@ defmodule Zazu.Error do
     :param,
     :request_id,
     :retry_after,
+    :payment_id,
     body: %{}
   ]
 
   @type kind ::
-          :authentication | :forbidden | :not_found | :validation | :rate_limit | :server | :api
+          :authentication
+          | :forbidden
+          | :not_found
+          | :validation
+          | :conflict
+          | :rate_limit
+          | :server
+          | :api
 
   @type t :: %__MODULE__{
           status: pos_integer(),
@@ -36,6 +46,7 @@ defmodule Zazu.Error do
           param: String.t() | nil,
           request_id: String.t() | nil,
           retry_after: non_neg_integer() | nil,
+          payment_id: String.t() | nil,
           body: map()
         }
 
@@ -62,6 +73,7 @@ defmodule Zazu.Error do
       param: string_or_nil(payload["param"]),
       request_id: header_value(headers, "x-request-id"),
       retry_after: retry_after(status, headers),
+      payment_id: string_or_nil(payload["payment_id"]),
       body: if(is_map(body), do: body, else: %{})
     }
   end
@@ -69,6 +81,8 @@ defmodule Zazu.Error do
   defp kind_for(401), do: :authentication
   defp kind_for(403), do: :forbidden
   defp kind_for(404), do: :not_found
+  defp kind_for(400), do: :validation
+  defp kind_for(409), do: :conflict
   defp kind_for(422), do: :validation
   defp kind_for(429), do: :rate_limit
   defp kind_for(status) when status >= 500, do: :server

@@ -9,6 +9,16 @@ defmodule Zazu.Test.CassetteReplay do
   (both sides are decoded and compared as terms, so key ordering and
   whitespace differences between Ruby's and Elixir's encoders never matter).
 
+  Load ONE cassette per test when two cassettes share method + URI
+  (`transfer_drafts/authorize` vs `authorize_same_key`, `create` vs
+  `create_duplicate`): the first matching interaction wins.
+
+  The authorize cassettes are loaded with `ignore_signature: true`: their
+  recorded `signature` is scrubbed to `<SIGNATURE>` (the real one is an HMAC
+  over the real nonce and secret, which replay cannot reproduce), so the
+  match is method + URI + body with `signature` removed. This mirrors the
+  Ruby `body_without_signature` matcher.
+
   Ruby's Psych writes non-UTF-8 bodies as base64 with the PRIMARY `!binary`
   tag (not the canonical `!!binary`), which yamerl rejects as an
   unrecognized node — so the tag is rewritten to a `binary_string` key
@@ -23,15 +33,19 @@ defmodule Zazu.Test.CassetteReplay do
   Loads the named cassettes (e.g. `"payment_links/list"`) and serves their
   interactions from a Bypass server. Returns a `Zazu.Client` pointed at it.
   Unmatched requests get a 501, which fails the calling assertion.
+
+  Options: `ignore_signature: true` drops the `"signature"` key from both
+  request bodies before comparing.
   """
-  def replay_client(names) do
+  def replay_client(names, opts \\ []) do
+    ignore_signature = Keyword.get(opts, :ignore_signature, false)
     interactions = Enum.flat_map(names, &load_cassette/1)
     bypass = Bypass.open()
 
     Bypass.expect(bypass, fn conn ->
       {:ok, body, conn} = Plug.Conn.read_body(conn)
 
-      case Enum.find(interactions, &matches?(&1, conn, body)) do
+      case Enum.find(interactions, &matches?(&1, conn, body, ignore_signature)) do
         nil ->
           Plug.Conn.send_resp(
             conn,
@@ -91,23 +105,26 @@ defmodule Zazu.Test.CassetteReplay do
   defp body_string(%{"string" => string}) when is_binary(string), do: string
   defp body_string(_body), do: ""
 
-  defp matches?(interaction, conn, body) do
+  defp matches?(interaction, conn, body, ignore_signature) do
     interaction.method == conn.method and
       interaction.path == conn.request_path and
       interaction.query == URI.decode_query(conn.query_string) and
-      json_equal?(interaction.request_body, body)
+      json_equal?(interaction.request_body, body, ignore_signature)
   end
 
   # Compares two bodies semantically when both parse as JSON, and
   # byte-for-byte otherwise (empty matches empty).
-  defp json_equal?(recorded, actual) when recorded == actual, do: true
+  defp json_equal?(recorded, actual, false) when recorded == actual, do: true
 
-  defp json_equal?(recorded, actual) do
+  defp json_equal?(recorded, actual, ignore_signature) do
     with {:ok, a} <- Jason.decode(recorded),
          {:ok, b} <- Jason.decode(actual) do
-      a == b
+      strip_signature(a, ignore_signature) == strip_signature(b, ignore_signature)
     else
       _ -> false
     end
   end
+
+  defp strip_signature(%{} = body, true), do: Map.delete(body, "signature")
+  defp strip_signature(body, _ignore_signature), do: body
 end

@@ -13,7 +13,7 @@ defmodule Zazu.Client do
           timeout: pos_integer()
         }
 
-  @default_base_url "https://zazu.ma"
+  @default_base_url "https://ma.manza.finance"
   @default_timeout 30_000
 
   @doc false

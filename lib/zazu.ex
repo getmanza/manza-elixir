@@ -32,7 +32,8 @@ defmodule Zazu do
     * `:api_key` — the Zazu API key (default: the `ZAZU_API_KEY` env var).
       Sent as `Authorization: Bearer <key>`.
     * `:base_url` — the API base URL (default: `ZAZU_BASE_URL` or
-      `https://zazu.ma`).
+      `https://ma.manza.finance`; use `https://za.manza.finance` for South
+      Africa).
     * `:api_version` — pins the `Zazu-Version` request header (default:
       `ZAZU_API_VERSION`).
     * `:timeout` — receive timeout in milliseconds (default: `30_000`).

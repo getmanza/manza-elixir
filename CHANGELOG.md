@@ -7,6 +7,21 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- `:conflict` error kind (409) on `Zazu.Error`, with `payment_id` read from `error.payment_id`; 400 now maps to `:validation`
+- `Zazu.TransferDrafts.authorize/4` (a blank signature is refused locally with `Zazu.ConfigurationError`) and `decline/4` (omits `reason` when absent); `client_reference` documented on `create/2`
+- `Zazu.TransferAuthorization` signer: `signature_input/7`, `sign/2`, `payee_for/1`, checked against the vectors shared with every SDK
+- `Zazu.Beneficiaries.create/2`, `list_external_accounts/3`, `get_external_account/3`, `create_external_account/3`
+- `Zazu.PayeeTrustRequests` (`create/2`, `get/2`)
+- Docs for the new response fields (`client_reference`, `authorization`, `settled_at`, `transaction`, `billing_address`, `collect_billing_address`, `customer_name`, `registration_number`, `vat_number`, the `clearing` status) and the market-gated `tax_id`, `ice_number` and `delivery_date`
+
+### Changed
+
+- Default base URL is now `https://ma.manza.finance` (`https://za.manza.finance` for South Africa); replay cassettes are recorded against `https://ma.manza.dev`
+- `Zazu.Beneficiaries` is no longer documented as read-only
+- Replay harness: one cassette per test where method + URI collide, and an `ignore_signature` option for the authorize cassettes
+
 ## [0.2.1]
 
 Version alignment: the whole SDK family now releases in lockstep with zazu-ruby. No functional changes since [0.1.0].

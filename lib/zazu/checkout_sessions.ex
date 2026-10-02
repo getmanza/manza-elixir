@@ -9,7 +9,11 @@ defmodule Zazu.CheckoutSessions do
   @doc """
   Calls `POST /api/checkout_sessions`.
 
-  Required attributes: `account_id`, `amount`, `success_url`.
+  Required attributes: `account_id`, `amount`, `success_url`. Optional:
+  `customer_name`, `collect_billing_address` and `billing_address`.
+
+  The response gains `settled_at` and `transaction`, and the session `status`
+  can be `"clearing"` while the payment settles.
   """
   @spec create(Client.t(), map()) :: {:ok, Zazu.Response.t()} | {:error, Exception.t()}
   def create(client, attributes) do
