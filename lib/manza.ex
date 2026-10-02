@@ -1,6 +1,6 @@
 defmodule Manza do
   @moduledoc """
-  Elixir SDK for the [Manza](https://manza.finance) API.
+  Elixir SDK for the [Manza](https://get-manza.com) API.
 
   Response bodies are returned as-is from the API — snake_case string-keyed
   maps, no struct mapping. The same shape ships across every Manza SDK (Ruby,

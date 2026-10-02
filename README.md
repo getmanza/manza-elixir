@@ -1,6 +1,6 @@
 # manza-elixir
 
-Elixir SDK for the [Manza](https://manza.finance) API.
+Elixir SDK for the [Manza](https://get-manza.com) API.
 
 ```elixir
 # mix.exs
