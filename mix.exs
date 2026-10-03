@@ -1,7 +1,7 @@
 defmodule Manza.MixProject do
   use Mix.Project
 
-  @version "0.3.0"
+  @version "1.0.0"
   @source_url "https://github.com/getmanza/manza-elixir"
 
   def project do
