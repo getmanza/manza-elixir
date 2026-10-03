@@ -65,11 +65,14 @@ jobs:
           HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
         run: |
           VERSION="${GITHUB_REF#refs/tags/v}"
-          STATUS=$(curl -s -o /dev/null -w '%{http_code}' "https://hex.pm/api/packages/manza/releases/$VERSION")
+          STATUS=$(curl -s --retry 3 -o /dev/null -w '%{http_code}' "https://hex.pm/api/packages/manza/releases/$VERSION")
           if [[ "$STATUS" == "200" ]]; then
             echo "manza $VERSION is already on Hex; skipping publish."
-          else
+          elif [[ "$STATUS" == "404" ]]; then
             mix hex.publish --yes
+          else
+            echo "Unable to determine whether manza $VERSION is on Hex (HTTP $STATUS)." >&2
+            exit 1
           fi
 
   github-release:
