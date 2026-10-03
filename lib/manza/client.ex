@@ -1,8 +1,10 @@
-defmodule Zazu.Client do
+defmodule Manza.Client do
   @moduledoc """
-  The SDK entry point. Build one with `Zazu.new/1` and pass it as the first
-  argument to every resource function (`Zazu.Accounts`, `Zazu.Invoices`, ...).
+  The SDK entry point. Build one with `Manza.new/1` and pass it as the first
+  argument to every resource function (`Manza.Accounts`, `Manza.Invoices`, ...).
   """
+
+  require Logger
 
   defstruct [:api_key, :base_url, :api_version, :timeout]
 
@@ -17,20 +19,20 @@ defmodule Zazu.Client do
   @default_timeout 30_000
 
   @doc false
-  @spec new(keyword()) :: {:ok, t()} | {:error, Zazu.ConfigurationError.t()}
+  @spec new(keyword()) :: {:ok, t()} | {:error, Manza.ConfigurationError.t()}
   def new(opts \\ []) do
-    api_key = opts[:api_key] || env("ZAZU_API_KEY")
-    base_url = opts[:base_url] || env("ZAZU_BASE_URL") || @default_base_url
+    api_key = opts[:api_key] || env("API_KEY")
+    base_url = opts[:base_url] || env("BASE_URL") || @default_base_url
 
     if api_key in [nil, ""] do
       {:error,
-       %Zazu.ConfigurationError{message: "missing API key: pass :api_key or set ZAZU_API_KEY"}}
+       %Manza.ConfigurationError{message: "missing API key: pass :api_key or set MANZA_API_KEY"}}
     else
       {:ok,
        %__MODULE__{
          api_key: api_key,
          base_url: String.trim_trailing(base_url, "/"),
-         api_version: opts[:api_version] || env("ZAZU_API_VERSION"),
+         api_version: opts[:api_version] || env("API_VERSION"),
          timeout: opts[:timeout] || @default_timeout
        }}
     end
@@ -48,12 +50,12 @@ defmodule Zazu.Client do
   @doc """
   Performs an HTTP request against the API.
 
-  Non-2xx responses come back as `{:error, %Zazu.Error{}}`; transport
-  failures as `{:error, %Zazu.ConnectionError{}}`. `body` (when non-nil) is
+  Non-2xx responses come back as `{:error, %Manza.Error{}}`; transport
+  failures as `{:error, %Manza.ConnectionError{}}`. `body` (when non-nil) is
   JSON-encoded.
   """
   @spec request(t(), atom(), String.t(), keyword() | map(), map() | nil) ::
-          {:ok, Zazu.Response.t()} | {:error, Exception.t()}
+          {:ok, Manza.Response.t()} | {:error, Exception.t()}
   def request(%__MODULE__{} = client, method, path, query \\ [], body \\ nil) do
     url = client.base_url <> "/" <> String.trim_leading(path, "/")
 
@@ -74,7 +76,7 @@ defmodule Zazu.Client do
         handle_response(response)
 
       {:error, exception} ->
-        {:error, %Zazu.ConnectionError{message: Exception.message(exception), reason: exception}}
+        {:error, %Manza.ConnectionError{message: Exception.message(exception), reason: exception}}
     end
   end
 
@@ -92,18 +94,18 @@ defmodule Zazu.Client do
 
   @doc false
   @spec list_page(t(), String.t(), keyword(), keyword()) ::
-          {:ok, Zazu.Page.t()} | {:error, Exception.t()}
+          {:ok, Manza.Page.t()} | {:error, Exception.t()}
   def list_page(%__MODULE__{} = client, path, base_query, opts) do
-    limit = Keyword.get(opts, :limit, Zazu.Page.max_per_page())
+    limit = Keyword.get(opts, :limit, Manza.Page.max_per_page())
     cursor = Keyword.get(opts, :cursor)
 
-    if is_integer(limit) and limit >= 1 and limit <= Zazu.Page.max_per_page() do
+    if is_integer(limit) and limit >= 1 and limit <= Manza.Page.max_per_page() do
       fetch_page(client, path, base_query, limit, cursor)
     else
       {:error,
-       %Zazu.ConfigurationError{
+       %Manza.ConfigurationError{
          message:
-           "limit must be between 1 and #{Zazu.Page.max_per_page()} (got #{inspect(limit)})"
+           "limit must be between 1 and #{Manza.Page.max_per_page()} (got #{inspect(limit)})"
        }}
     end
   end
@@ -116,7 +118,7 @@ defmodule Zazu.Client do
 
     with {:ok, response} <- get(client, path, query) do
       fetch = fn next_cursor -> fetch_page(client, path, base_query, limit, next_cursor) end
-      {:ok, Zazu.Page.from_response(response, fetch)}
+      {:ok, Manza.Page.from_response(response, fetch)}
     end
   end
 
@@ -140,12 +142,12 @@ defmodule Zazu.Client do
   defp headers(client, body) do
     [
       {"authorization", "Bearer " <> client.api_key},
-      {"user-agent", "zazu-elixir/" <> Zazu.version()},
+      {"user-agent", "manza-elixir/" <> Manza.version()},
       {"accept", "application/json"}
     ]
     |> then(fn h -> if body, do: h ++ [{"content-type", "application/json"}], else: h end)
     |> then(fn h ->
-      if client.api_version, do: h ++ [{"zazu-version", client.api_version}], else: h
+      if client.api_version, do: h ++ [{"manza-version", client.api_version}], else: h
     end)
   end
 
@@ -155,7 +157,7 @@ defmodule Zazu.Client do
 
     if status in 200..299 do
       {:ok,
-       %Zazu.Response{
+       %Manza.Response{
          status: status,
          request_id: header_value(headers, "x-request-id"),
          body: body,
@@ -163,7 +165,7 @@ defmodule Zazu.Client do
          headers: headers
        }}
     else
-      {:error, Zazu.Error.from_response(status, headers, body)}
+      {:error, Manza.Error.from_response(status, headers, body)}
     end
   end
 
@@ -185,7 +187,39 @@ defmodule Zazu.Client do
     end
   end
 
+  # Reads MANZA_<name>, falling back to the legacy ZAZU_<name> (all of 1.x)
+  # with a deprecation warning, logged once per variable.
   defp env(name) do
+    case get_env("MANZA_" <> name) do
+      nil -> legacy_env("ZAZU_" <> name, "MANZA_" <> name)
+      value -> value
+    end
+  end
+
+  defp legacy_env(legacy, current) do
+    case get_env(legacy) do
+      nil ->
+        nil
+
+      value ->
+        warn_deprecated_once(legacy, current)
+        value
+    end
+  end
+
+  defp warn_deprecated_once(legacy, current) do
+    key = {__MODULE__, :deprecated_env, legacy}
+
+    if :persistent_term.get(key, nil) == nil do
+      :persistent_term.put(key, true)
+
+      Logger.warning(
+        "manza: #{legacy} is deprecated, use #{current} (the fallback is removed in 2.0)"
+      )
+    end
+  end
+
+  defp get_env(name) do
     case System.get_env(name) do
       value when value in [nil, ""] -> nil
       value -> value

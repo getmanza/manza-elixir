@@ -1,19 +1,19 @@
-defmodule Zazu.MixProject do
+defmodule Manza.MixProject do
   use Mix.Project
 
   @version "0.3.0"
-  @source_url "https://github.com/getzazu/zazu-elixir"
+  @source_url "https://github.com/getmanza/manza-elixir"
 
   def project do
     [
-      app: :zazu,
+      app: :manza,
       version: @version,
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps(),
-      name: "zazu",
-      description: "Elixir SDK for the Zazu API",
+      name: "manza",
+      description: "Elixir SDK for the Manza API",
       package: package(),
       source_url: @source_url
     ]
@@ -40,7 +40,7 @@ defmodule Zazu.MixProject do
 
   defp package do
     [
-      name: "zazu",
+      name: "manza",
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url}
     ]

@@ -1,4 +1,4 @@
-defmodule Zazu.Page do
+defmodule Manza.Page do
   @moduledoc """
   One page of a cursor-paginated list endpoint:
   `{"data" => [...], "has_more" => bool, "next_cursor" => string | nil}`.
@@ -13,7 +13,7 @@ defmodule Zazu.Page do
           data: [map()],
           has_more: boolean(),
           next_cursor: String.t() | nil,
-          response: Zazu.Response.t(),
+          response: Manza.Response.t(),
           fetch: (String.t() -> {:ok, t()} | {:error, Exception.t()})
         }
 
@@ -33,9 +33,9 @@ defmodule Zazu.Page do
   def next(%__MODULE__{fetch: fetch, next_cursor: cursor}), do: fetch.(cursor)
 
   @doc false
-  @spec from_response(Zazu.Response.t(), (String.t() -> {:ok, t()} | {:error, Exception.t()})) ::
+  @spec from_response(Manza.Response.t(), (String.t() -> {:ok, t()} | {:error, Exception.t()})) ::
           t()
-  def from_response(%Zazu.Response{} = response, fetch) do
+  def from_response(%Manza.Response{} = response, fetch) do
     body = if is_map(response.body), do: response.body, else: %{}
 
     %__MODULE__{

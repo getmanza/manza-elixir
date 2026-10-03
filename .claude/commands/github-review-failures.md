@@ -29,7 +29,7 @@ Categorize:
 - **Test failures** — ExUnit assertion failed, timeout
 - **Format failures** — `mix format --check-formatted` (the only lint/format gate; there is no Credo or Dialyzer)
 - **Compile failures** — `mix deps.get` or compilation errors, warnings from a new Elixir/OTP
-- **Cassette fetch failures** — `scripts/fetch-cassettes.sh` could not resolve or download the zazu-ruby tarball
+- **Cassette fetch failures** — `scripts/fetch-cassettes.sh` could not resolve or download the manza-ruby tarball
 - **Cassette replay failures** — the Bypass server answered 501 `no cassette interaction matches ...`
 - **Release / publish failures** — `HEX_API_KEY` secret or `hex` environment, `mix hex.publish`, tag/version mismatch
 
@@ -43,21 +43,21 @@ For each failure:
 
 ```bash
 export MIX_ENV=test
-scripts/fetch-cassettes.sh            # cassettes (fetched from the newest zazu-ruby v* release)
+scripts/fetch-cassettes.sh            # cassettes (the manza-ruby release pinned in the script)
 mix deps.get
-mix test test/zazu/<file>_test.exs    # one test file
+mix test test/manza/<file>_test.exs    # one test file
 mix format --check-formatted          # format (fix with: mix format)
 mix test                              # full suite
 ```
 
-Never reproduce a failure by calling a live Zazu/Manza API. Replay cassettes only.
+Never reproduce a failure by calling a live Manza API. Replay cassettes only.
 
 If you can't reproduce locally, the failure is environmental (CI-only):
 - Different Elixir/OTP version → CI pins OTP 27 and Elixir 1.18 via `erlef/setup-beam` in `ci.yml` and `release.yml`; a newer local toolchain may format or warn differently
-- Stale cassettes → the tarball moves with every zazu-ruby release; re-run `scripts/fetch-cassettes.sh`
+- Stale cassettes → `scripts/fetch-cassettes.sh` fetches the pinned `PINNED_TAG`; to pick up a newer manza-ruby release, bump `PINNED_TAG` (or pass the tag as an argument) and re-run it
 - Race condition → re-running the job fixes it
 - Network → GitHub (cassette tarball, `git ls-remote`) or Hex hiccup; the fetch script already retries
-- Secret missing → `HEX_API_KEY` not set on the `hex` environment of `getmanza/zazu-elixir`
+- Secret missing → `HEX_API_KEY` not set on the `hex` environment of `getmanza/manza-elixir`
 
 ### Find the root cause
 
@@ -138,16 +138,16 @@ If the failure was CI-config drift (workflow YAML out of sync with reality), als
 The recorded request shape drifted from what the SDK now sends, or the test loaded the wrong cassettes. Check, in order:
 - Two cassettes sharing method + URI in one test (`authorize` vs `authorize_same_key`, `create` vs `create_duplicate`): load one per test.
 - An authorize cassette without `ignore_signature: true` (recorded `signature` is scrubbed to `<SIGNATURE>`).
-- A fixture id that drifted from zazu-ruby's `spec/support/fixture_ids.rb`.
-- Otherwise the wire format changed: re-record via zazu-ruby (never here) and ship a new SDK version.
+- A fixture id that drifted from manza-ruby's `spec/support/fixture_ids.rb`.
+- Otherwise the wire format changed: re-record via manza-ruby (never here) and ship a new SDK version.
 
 ### `scripts/fetch-cassettes.sh` fails
 
-It resolves the newest zazu-ruby `v*` tag with `git ls-remote` and downloads `cassettes-<tag>.tar.gz` from that release. A failure usually means the release has no tarball yet, or GitHub is flaky (the script retries). Pin a tag to confirm: `scripts/fetch-cassettes.sh v0.3.0`.
+It downloads the manza-ruby tag pinned in the script (`PINNED_TAG`, currently `v1.0.0`) as `cassettes-<tag>.tar.gz` from that release. A failure usually means the release has no tarball yet, or GitHub is flaky (the script retries). Pin a tag to confirm: `scripts/fetch-cassettes.sh v1.0.0`.
 
 ### Hex publish failed (401/403)
 
-Hex has no OIDC trusted publishing: `release.yml` publishes with the `HEX_API_KEY` secret on the `hex` environment. Check the secret exists on `getmanza/zazu-elixir`'s `hex` environment, was generated with `api:write`, and belongs to an owner of the Hex package `zazu`.
+Hex has no OIDC trusted publishing: `release.yml` publishes with the `HEX_API_KEY` secret on the `hex` environment. Check the secret exists on `getmanza/manza-elixir`'s `hex` environment, was generated with `api:write`, and belongs to an owner of the Hex package `manza`.
 
 ### Tag does not match mix.exs version
 

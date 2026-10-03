@@ -118,9 +118,9 @@ gh api repos/{owner}/{repo}/pulls/<PR>/comments \
 CodeRabbit doesn't know:
 - The Karpathy guidelines we follow (no speculative abstractions, surgical changes).
 - Our snake_case wire format decision (string-keyed maps as-is) — it sometimes suggests atom keys or camelCasing.
-- That zazu-ruby is the reference implementation — sometimes it suggests "improvements" the SDK family already handles.
+- That manza-ruby is the reference implementation — sometimes it suggests "improvements" the SDK family already handles.
 - The cassette-replay contract — it might suggest mocking that breaks parity with the Ruby SDK, or loading several cassettes that share method + URI.
-- The shared error model — one `Zazu.Error` with a `kind`; it might suggest new error structs.
+- The shared error model — one `Manza.Error` with a `kind`; it might suggest new error structs.
 
 When CodeRabbit suggests something that would violate one of these, push back with a one-line explanation. Don't capitulate to keep the PR quiet.
 

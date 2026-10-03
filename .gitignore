@@ -20,8 +20,8 @@ erl_crash.dump
 *.ez
 
 # Ignore package tarball (built via "mix hex.build").
-zazu-*.tar
+manza-*.tar
 
 
-# Canonical VCR cassettes fetched from zazu-ruby releases (scripts/fetch-cassettes.sh).
+# Canonical VCR cassettes fetched from manza-ruby releases (scripts/fetch-cassettes.sh).
 /testdata/cassettes/

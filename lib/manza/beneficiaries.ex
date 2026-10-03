@@ -1,4 +1,4 @@
-defmodule Zazu.Beneficiaries do
+defmodule Manza.Beneficiaries do
   @moduledoc """
   Saved transfer recipients.
 
@@ -8,7 +8,7 @@ defmodule Zazu.Beneficiaries do
   no update or delete.
   """
 
-  alias Zazu.Client
+  alias Manza.Client
 
   @doc """
   Calls `GET /api/beneficiaries`.
@@ -18,7 +18,7 @@ defmodule Zazu.Beneficiaries do
     * `:limit` — page size (1..100, default 100).
     * `:cursor` — pagination cursor.
   """
-  @spec list(Client.t(), keyword()) :: {:ok, Zazu.Page.t()} | {:error, Exception.t()}
+  @spec list(Client.t(), keyword()) :: {:ok, Manza.Page.t()} | {:error, Exception.t()}
   def list(client, opts \\ []) do
     Client.list_page(client, "api/beneficiaries", [], opts)
   end
@@ -26,7 +26,7 @@ defmodule Zazu.Beneficiaries do
   @doc """
   Calls `GET /api/beneficiaries/:id`.
   """
-  @spec get(Client.t(), String.t()) :: {:ok, Zazu.Response.t()} | {:error, Exception.t()}
+  @spec get(Client.t(), String.t()) :: {:ok, Manza.Response.t()} | {:error, Exception.t()}
   def get(client, id) do
     Client.get(client, Client.encode_path(["api/beneficiaries", id]))
   end
@@ -39,7 +39,7 @@ defmodule Zazu.Beneficiaries do
   `email`, `phone_number`. Values must be strings. Shares a 10/minute limit
   with `create_external_account/3`.
   """
-  @spec create(Client.t(), map()) :: {:ok, Zazu.Response.t()} | {:error, Exception.t()}
+  @spec create(Client.t(), map()) :: {:ok, Manza.Response.t()} | {:error, Exception.t()}
   def create(client, attributes) do
     Client.post(client, "api/beneficiaries", attributes)
   end
@@ -53,7 +53,7 @@ defmodule Zazu.Beneficiaries do
     * `:cursor` — pagination cursor.
   """
   @spec list_external_accounts(Client.t(), String.t(), keyword()) ::
-          {:ok, Zazu.Page.t()} | {:error, Exception.t()}
+          {:ok, Manza.Page.t()} | {:error, Exception.t()}
   def list_external_accounts(client, beneficiary_id, opts \\ []) do
     path = Client.encode_path(["api/beneficiaries", beneficiary_id, "external_accounts"])
     Client.list_page(client, path, [], opts)
@@ -61,7 +61,7 @@ defmodule Zazu.Beneficiaries do
 
   @doc "Calls `GET /api/beneficiaries/:beneficiary_id/external_accounts/:id`."
   @spec get_external_account(Client.t(), String.t(), String.t()) ::
-          {:ok, Zazu.Response.t()} | {:error, Exception.t()}
+          {:ok, Manza.Response.t()} | {:error, Exception.t()}
   def get_external_account(client, beneficiary_id, id) do
     Client.get(
       client,
@@ -77,7 +77,7 @@ defmodule Zazu.Beneficiaries do
   (required in ZA, rejected in MA, where it is derived from the RIB).
   """
   @spec create_external_account(Client.t(), String.t(), map()) ::
-          {:ok, Zazu.Response.t()} | {:error, Exception.t()}
+          {:ok, Manza.Response.t()} | {:error, Exception.t()}
   def create_external_account(client, beneficiary_id, attributes) do
     Client.post(
       client,

@@ -1,99 +1,99 @@
-# zazu-elixir
+# manza-elixir
 
-Elixir SDK for the Zazu API (Hex package `zazu`). This SDK **replays zazu-ruby's cassettes**: zazu-ruby is the reference implementation that records them against the API and ships them as a release tarball. Every request shape and response here must match what those cassettes recorded.
+Elixir SDK for the Manza API (Hex package `manza`). This SDK **replays manza-ruby's cassettes**: manza-ruby is the reference implementation that records them against the API and ships them as a release tarball. Every request shape and response here must match what those cassettes recorded.
 
 ## Stack
 
 | Concern | Tool | Notes |
 |---|---|---|
 | Language | Elixir 1.18 on OTP 27 (CI) | `mix.exs` requires `~> 1.15`. CI (`ci.yml`, `release.yml`) runs a single version, no matrix |
-| HTTP | Req ~> 0.5 | `lib/zazu/client.ex`: `retry: false`, `decode_body: false` (JSON is decoded by the SDK with Jason) |
-| Test runner | ExUnit | `test/zazu/*_test.exs` |
-| Cassette replay (tests) | Bypass + `yaml_elixir` | `test/support/cassette_replay.ex`. Reads zazu-ruby's release tarball from `testdata/cassettes/` (gitignored) |
+| HTTP | Req ~> 0.5 | `lib/manza/client.ex`: `retry: false`, `decode_body: false` (JSON is decoded by the SDK with Jason) |
+| Test runner | ExUnit | `test/manza/*_test.exs` |
+| Cassette replay (tests) | Bypass + `yaml_elixir` | `test/support/cassette_replay.ex`. Reads manza-ruby's release tarball from `testdata/cassettes/` (gitignored) |
 | Format | `mix format` | `.formatter.exs`. CI runs `mix format --check-formatted` |
 | Lint / typecheck | none | No Credo, no Dialyzer in this repo |
-| Registry | Hex, package `zazu` | https://hex.pm/packages/zazu |
-| Release | `bin/release` | zazu SDK release kit (byte-identical across SDK repos; repo-specific bits in `scripts/version` + `scripts/release-check`). `release.yml` publishes with `mix hex.publish` |
+| Registry | Hex, package `manza` | https://hex.pm/packages/manza |
+| Release | `bin/release` | manza SDK release kit (byte-identical across SDK repos; repo-specific bits in `scripts/version` + `scripts/release-check`). `release.yml` publishes with `mix hex.publish` |
 
 ## Public API surface
 
 ```elixir
-{:ok, client} = Zazu.new(api_key: "sk_live_...")   # or ZAZU_API_KEY; Zazu.new!/1 raises
+{:ok, client} = Manza.new(api_key: "sk_live_...")   # or MANZA_API_KEY; Manza.new!/1 raises
 
-{:ok, entity} = Zazu.Entity.get(client)
-{:ok, page} = Zazu.Accounts.list(client, currency_code: "MAD")
-{:ok, page} = Zazu.Customers.list(client, q: "Acme")
-Zazu.Page.next(page)                               # {:ok, page} | {:error, _} | nil on the last page
+{:ok, entity} = Manza.Entity.get(client)
+{:ok, page} = Manza.Accounts.list(client, currency_code: "MAD")
+{:ok, page} = Manza.Customers.list(client, q: "Acme")
+Manza.Page.next(page)                               # {:ok, page} | {:error, _} | nil on the last page
 
 # Transfer drafts: authorize/decline with a key other than the creator's
-{:ok, draft} = Zazu.TransferDrafts.create(client, %{"account_id" => id, "amount" => "150.00", "beneficiary_id" => bid, "client_reference" => "INV-1"})
-{:error, %Zazu.Error{kind: :conflict, payment_id: existing}} = Zazu.TransferDrafts.create(client, same_attrs)  # 409
+{:ok, draft} = Manza.TransferDrafts.create(client, %{"account_id" => id, "amount" => "150.00", "beneficiary_id" => bid, "client_reference" => "INV-1"})
+{:error, %Manza.Error{kind: :conflict, payment_id: existing}} = Manza.TransferDrafts.create(client, same_attrs)  # 409
 
-payee = Zazu.TransferAuthorization.payee_for(external_account_id: draft.body["external_account_id"])
-input = Zazu.TransferAuthorization.signature_input(pid, nonce, amount, currency, account_id, payee, client_reference)
-signature = Zazu.TransferAuthorization.sign(signing_secret, input)
-Zazu.TransferDrafts.authorize(authorizer_client, pid, authorization_id, signature)
-Zazu.TransferDrafts.decline(authorizer_client, pid, authorization_id, "reason")
+payee = Manza.TransferAuthorization.payee_for(external_account_id: draft.body["external_account_id"])
+input = Manza.TransferAuthorization.signature_input(pid, nonce, amount, currency, account_id, payee, client_reference)
+signature = Manza.TransferAuthorization.sign(signing_secret, input)
+Manza.TransferDrafts.authorize(authorizer_client, pid, authorization_id, signature)
+Manza.TransferDrafts.decline(authorizer_client, pid, authorization_id, "reason")
 
 # Beneficiaries (create + external accounts) and payee trust requests
-Zazu.Beneficiaries.create(client, attrs)
-Zazu.Beneficiaries.list_external_accounts(client, beneficiary_id)
-Zazu.Beneficiaries.create_external_account(client, beneficiary_id, attrs)
-Zazu.PayeeTrustRequests.create(client, [external_account_id])
+Manza.Beneficiaries.create(client, attrs)
+Manza.Beneficiaries.list_external_accounts(client, beneficiary_id)
+Manza.Beneficiaries.create_external_account(client, beneficiary_id, attrs)
+Manza.PayeeTrustRequests.create(client, [external_account_id])
 ```
 
-- Resource modules: `Entity`, `Accounts`, `Customers`, `Invoices`, `PaymentLinks`, `CheckoutSessions`, `WebhookEndpoints`, `Beneficiaries`, `PayeeTrustRequests`, `TransferDrafts`, plus the pure `TransferAuthorization` signer (all under `Zazu.`, in `lib/zazu/`)
-- Tuple returns: `{:ok, %Zazu.Response{}}` (body as `response.body`), list calls return `{:ok, %Zazu.Page{}}`; errors are `{:error, exception}`
-- `Zazu.Page`: cursor-based, hard cap of 100/page (`Zazu.Page.max_per_page/0`), `Zazu.Page.next/1`
-- **Error model**: one `Zazu.Error` struct with a `kind`, not a class hierarchy. Discriminate on `error.kind`, never on `status` or `message`:
+- Resource modules: `Entity`, `Accounts`, `Customers`, `Invoices`, `PaymentLinks`, `CheckoutSessions`, `WebhookEndpoints`, `Beneficiaries`, `PayeeTrustRequests`, `TransferDrafts`, plus the pure `TransferAuthorization` signer (all under `Manza.`, in `lib/manza/`)
+- Tuple returns: `{:ok, %Manza.Response{}}` (body as `response.body`), list calls return `{:ok, %Manza.Page{}}`; errors are `{:error, exception}`
+- `Manza.Page`: cursor-based, hard cap of 100/page (`Manza.Page.max_per_page/0`), `Manza.Page.next/1`
+- **Error model**: one `Manza.Error` struct with a `kind`, not a class hierarchy. Discriminate on `error.kind`, never on `status` or `message`:
   - kinds: `:authentication` (401), `:forbidden` (403), `:not_found` (404), `:validation` (400, 422), `:conflict` (409, carries `payment_id`), `:rate_limit` (429, carries `retry_after`), `:server` (5xx), `:api` (any other non-2xx)
-  - `Zazu.ConfigurationError` is the argument error: bad client config, `limit` over 100, a blank authorization signature (all refused before any request)
-  - `Zazu.ConnectionError` wraps transport failures
-  - `Zazu.TransferAuthorization` is the exception: it is pure and raises `ArgumentError` on programming mistakes (non-string amount, wrong payee options)
+  - `Manza.ConfigurationError` is the argument error: bad client config, `limit` over 100, a blank authorization signature (all refused before any request)
+  - `Manza.ConnectionError` wraps transport failures
+  - `Manza.TransferAuthorization` is the exception: it is pure and raises `ArgumentError` on programming mistakes (non-string amount, wrong payee options)
 - Snake-case wire format: request and response bodies are string-keyed maps returned as-is. **No auto-camelCasing, no struct mapping.**
 
 ## How to work in this codebase
 
 1. **Tests come first.** Every change to `lib/` ships with a test. Cassette-replay tests are the contract: they enforce the same wire format across Ruby, TS, Elixir and the other SDKs.
-2. **Use the SDK's primitives.** `Zazu.Client` (`get/post/patch/delete/list_page`), `Zazu.Page`, `Zazu.Error` kinds, `Zazu.Client.encode_path/1` for URL construction, `Zazu.Client.query_filters/2`. Don't hand-roll Req calls, string-interpolate URLs, or match on `error.message`.
+2. **Use the SDK's primitives.** `Manza.Client` (`get/post/patch/delete/list_page`), `Manza.Page`, `Manza.Error` kinds, `Manza.Client.encode_path/1` for URL construction, `Manza.Client.query_filters/2`. Don't hand-roll Req calls, string-interpolate URLs, or match on `error.message`.
 3. **Snake-case stays.** Response keys are wire format. We don't atomize or camelCase them.
 4. **Format must be clean.** CI gates on `mix format --check-formatted`. There is no other linter.
 
 ## Critical rules
 
-- **Never call a live Zazu/Manza API** from tests, scripts or Claude sessions. Tests replay zazu-ruby's cassettes only. Live staging calls create real transfers and approval requests for the team. Only zazu-ruby records cassettes.
+- **Never call a live Manza API** from tests, scripts or Claude sessions. Tests replay manza-ruby's cassettes only. Live staging calls create real transfers and approval requests for the team. Only manza-ruby records cassettes.
 - **`mix format --check-formatted` and `mix test` before every commit.** `scripts/release-check` and CI run the same.
 - **Cassette contract.**
-  - Cassettes come from the newest zazu-ruby `v*` release (`cassettes-vX.Y.Z.tar.gz`) via `scripts/fetch-cassettes.sh`, extracted to `testdata/cassettes/` (gitignored). They are recorded against `https://ma.manza.dev`.
+  - Cassettes come from the manza-ruby release pinned in `scripts/fetch-cassettes.sh` (`PINNED_TAG`, `cassettes-vX.Y.Z.tar.gz`; bump it on purpose), extracted to `testdata/cassettes/` (gitignored). They are recorded against `https://ma.manza.dev`.
   - Load **one cassette per test**: `transfer_drafts/authorize` vs `authorize_same_key`, and `create` vs `create_duplicate`, share method + URI, and the first matching interaction wins.
   - The three authorize cassettes (`authorize`, `authorize_same_key`, `authorize_bad_signature`) are loaded with `ignore_signature: true`: they match the body minus `signature` (the recorded one is scrubbed to `<SIGNATURE>`).
   - Every other body is matched semantically: method + path + query (host ignored) + JSON bodies decoded and compared as terms (key order and whitespace never matter); non-JSON bodies compare byte-for-byte.
   - Cassette responses carry no `Content-Length`.
-  - `test/support/fixture_ids.ex` must stay identical to zazu-ruby's `spec/support/fixture_ids.rb` (same env var names, same placeholders). Add new ids to both.
-- **Hosts.** Default `https://ma.manza.finance`, South Africa `https://za.manza.finance`, staging and cassettes `https://ma.manza.dev`. Env var names stay `ZAZU_*` (`ZAZU_API_KEY`, `ZAZU_BASE_URL`, `ZAZU_API_VERSION`) and the namespace stays `Zazu` until the rename plan (zazu-ruby `docs/plans/2026-10-manza-rename.md`).
-- **The error model is shared across the SDK family.** Adding an error kind (or class, elsewhere) means coordinating zazu-ruby and zazu-ts at minimum. The 10th is the conflict (409), here `kind: :conflict`.
-- **Signer.** `Zazu.TransferAuthorization` must keep reproducing the two fixed vectors from zazu-ruby's `spec/zazu/transfer_authorization_spec.rb` (see `test/zazu/transfer_authorization_test.exs`). Never sign the server's `signature_input` blindly: build it from your own record of the transfer.
+  - `test/support/fixture_ids.ex` must stay identical to manza-ruby's `spec/support/fixture_ids.rb` (same env var names, same placeholders). Add new ids to both.
+- **Hosts.** Default `https://ma.manza.finance`, South Africa `https://za.manza.finance`, staging and cassettes `https://ma.manza.dev`. Env vars: `MANZA_API_KEY`, `MANZA_BASE_URL`, `MANZA_API_VERSION`, read first; the legacy `ZAZU_*` names are a fallback for all of 1.x that logs a one-time deprecation warning per variable (`Manza.Client`).
+- **The error model is shared across the SDK family.** Adding an error kind (or class, elsewhere) means coordinating manza-ruby and manza-ts at minimum. The 10th is the conflict (409), here `kind: :conflict`.
+- **Signer.** `Manza.TransferAuthorization` must keep reproducing the two fixed vectors from manza-ruby's `spec/manza/transfer_authorization_spec.rb` (see `test/manza/transfer_authorization_test.exs`). Never sign the server's `signature_input` blindly: build it from your own record of the transfer.
 - **Release.** `bin/release` is byte-identical across the SDK repos and never edited in place. Repo-specific logic lives in `scripts/version` (reads/writes `@version` in `mix.exs`) and `scripts/release-check` (fetch cassettes, deps, format, test). `release.yml` gates on tag == `mix.exs` version.
-- **Hex has no OIDC trusted publishing.** `release.yml` publishes with the `HEX_API_KEY` secret on the `hex` GitHub environment (add required reviewers there for a human gate). Generate the key with `mix hex.user key generate --permission api:write`. The `hex` environment and the secret must live on `getmanza/zazu-elixir`, and the key's Hex account must own the package `zazu`.
-- **The repo moved from `getzazu` to `getmanza`.** Remotes and URLs must say `getmanza`. Known stragglers (left alone in this repo's docs-only change): `REPO` in `scripts/fetch-cassettes.sh`, `@source_url` in `mix.exs`, and links in `README.md`.
+- **Hex has no OIDC trusted publishing.** `release.yml` publishes with the `HEX_API_KEY` secret on the `hex` GitHub environment (add required reviewers there for a human gate). Generate the key on https://hex.pm/dashboard/keys with API write permission (Hex 2.5 removed `mix hex.user key generate`). The `hex` environment and the secret must live on `getmanza/manza-elixir`, and the key's Hex account must own the package `manza`.
+- **Names.** Repo `getmanza/manza-elixir`, Hex package `manza`, app `:manza`, modules `Manza.*`. The old `zazu` Hex package is retired separately; never reintroduce `Zazu`/`ZAZU_` outside the env fallback and the CHANGELOG.
 - **Never escape backticks in PR bodies.** With `<<'EOF'` (single-quoted heredoc) the shell passes everything through verbatim. See "PR descriptions" below.
 
 ## PR descriptions
 
-Write PR description bodies in plain Markdown. **Do not escape backticks** with `` \` `` — GitHub renders `` \` `` literally as a backslash followed by a backtick, producing output like `` \`Zazu.Page\` `` instead of the monospace `Zazu.Page` the reader expects.
+Write PR description bodies in plain Markdown. **Do not escape backticks** with `` \` `` — GitHub renders `` \` `` literally as a backslash followed by a backtick, producing output like `` \`Manza.Page\` `` instead of the monospace `Manza.Page` the reader expects.
 
 The usual cause is writing the description inside a bash heredoc (`gh pr create --body "$(cat <<'EOF' ... EOF)"`) and then reflexively escaping every backtick because of shell-quoting muscle memory. With `<<'EOF'` (single-quoted delimiter) the shell does NOT interpret anything inside the heredoc — backticks, dollars, and backslashes all pass through verbatim. So write them exactly as you want them rendered:
 
 ```bash
-# Good — renders as `Zazu.Page` in monospace
+# Good — renders as `Manza.Page` in monospace
 gh pr create --body "$(cat <<'EOF'
-Uses the `Zazu.Page` helper.
+Uses the `Manza.Page` helper.
 EOF
 )"
 
-# Bad — renders as \`Zazu.Page\` literally in the PR body
+# Bad — renders as \`Manza.Page\` literally in the PR body
 gh pr create --body "$(cat <<'EOF'
-Uses the \`Zazu.Page\` helper.
+Uses the \`Manza.Page\` helper.
 EOF
 )"
 ```
@@ -152,12 +152,12 @@ Commands are the ones in `.github/workflows/ci.yml` (CI sets `MIX_ENV=test`):
 ```bash
 # One-time setup
 export MIX_ENV=test
-scripts/fetch-cassettes.sh          # newest zazu-ruby v* tarball -> testdata/cassettes/ (git ls-remote + curl, no API calls)
-scripts/fetch-cassettes.sh v0.3.0   # or pin a tag
+scripts/fetch-cassettes.sh          # the pinned manza-ruby tarball (v1.0.0) -> testdata/cassettes/
+scripts/fetch-cassettes.sh v1.0.1   # or another tag
 mix deps.get
 
 # Daily loop
-mix test test/zazu/resources_test.exs   # while iterating
+mix test test/manza/resources_test.exs   # while iterating
 mix format                              # auto-format
 mix format --check-formatted            # what CI gates on
 mix test                                # full suite
@@ -188,18 +188,18 @@ These live in `.claude/commands/` and are available in any Claude Code session:
 
 ## Cross-SDK contract
 
-`zazu-ruby` is the reference implementation:
+`manza-ruby` is the reference implementation:
 
 - Records cassettes against `https://ma.manza.dev`
 - Ships them as a release tarball (`cassettes-vX.Y.Z.tar.gz`) on each version
-- All other SDKs (`zazu-ts`, `zazu-elixir`, future `zazu-python`, `zazu-go`, `zazu-php`, `zazu-crystal`, `zazu-rust`) replay these cassettes in their own test harness
+- All other SDKs (`manza-ts`, `manza-elixir`, future `manza-python`, `manza-go`, `manza-php`, `manza-crystal`, `manza-rust`) replay these cassettes in their own test harness
 
-If the contract breaks (e.g., new request shape, new error kind), it's a coordinated change across at least two repos: zazu-ruby and zazu-ts.
+If the contract breaks (e.g., new request shape, new error kind), it's a coordinated change across at least two repos: manza-ruby and manza-ts.
 
 ## Repository links
 
-- Ruby SDK (reference): https://github.com/getmanza/zazu-ruby
-- TypeScript SDK: https://github.com/getmanza/zazu-ts
-- This repo: https://github.com/getmanza/zazu-elixir
-- Hex package: https://hex.pm/packages/zazu
+- Ruby SDK (reference): https://github.com/getmanza/manza-ruby
+- TypeScript SDK: https://github.com/getmanza/manza-ts
+- This repo: https://github.com/getmanza/manza-elixir
+- Hex package: https://hex.pm/packages/manza
 - CLI consumer: https://github.com/getmanza/cli
