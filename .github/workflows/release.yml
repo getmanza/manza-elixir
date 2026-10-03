@@ -58,9 +58,22 @@ jobs:
             echo "Tag v$TAG_VERSION does not match mix.exs version $PKG_VERSION" >&2
             exit 1
           fi
-      - run: mix hex.publish --yes
+      - name: Publish to Hex
+        # Idempotent: publishing a drafted GitHub release re-fires the tag push,
+        # and Hex rejects re-publishing an existing version without --replace.
         env:
           HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          STATUS=$(curl -s --retry 3 -o /dev/null -w '%{http_code}' "https://hex.pm/api/packages/manza/releases/$VERSION")
+          if [[ "$STATUS" == "200" ]]; then
+            echo "manza $VERSION is already on Hex; skipping publish."
+          elif [[ "$STATUS" == "404" ]]; then
+            mix hex.publish --yes
+          else
+            echo "Unable to determine whether manza $VERSION is on Hex (HTTP $STATUS)." >&2
+            exit 1
+          fi
 
   github-release:
     needs: publish
@@ -74,5 +87,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${GITHUB_REF#refs/tags/}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "GitHub release $tag already exists; skipping."
+            exit 0
+          fi
           gh release create "$tag" --title "$tag" \
             --notes "See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md)."
