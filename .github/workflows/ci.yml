@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     env:
       MIX_ENV: test
     steps:
@@ -29,7 +29,7 @@ jobs:
         run: scripts/fetch-cassettes.sh
 
       - name: Restore deps cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             deps
