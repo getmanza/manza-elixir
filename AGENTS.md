@@ -1,5 +1,7 @@
 # manza-elixir
 
+Project instructions for every agent: Claude Code (`CLAUDE.md` imports this file); other agents read this file directly. Claude's workflow comes from the `flow` plugin (`.claude/settings.json`), which acts on the facts in `## Workflow` below.
+
 Elixir SDK for the Manza API (Hex package `manza`). This SDK **replays manza-ruby's cassettes**: manza-ruby is the reference implementation that records them against the API and ships them as a release tarball. Every request shape and response here must match what those cassettes recorded.
 
 ## Stack
@@ -61,7 +63,8 @@ Manza.PayeeTrustRequests.create(client, [external_account_id])
 
 ## Critical rules
 
-- **Never call a live Manza API** from tests, scripts or Claude sessions. Tests replay manza-ruby's cassettes only. Live staging calls create real transfers and approval requests for the team. Only manza-ruby records cassettes.
+- **Never call a live Manza API** from tests, scripts or Claude sessions, staging (`https://ma.manza.dev`) included. Tests replay manza-ruby's cassettes only. Live staging calls create real transfers and approval requests for the team. Only manza-ruby records cassettes.
+- **A replay mismatch is a wire-format drift, never a reason to loosen the matcher.** Check, in order: two cassettes sharing method + URI in one test; an authorize cassette without `ignore_signature: true`; a fixture id that drifted from manza-ruby's `spec/support/fixture_ids.rb`. Otherwise fix the SDK, or have manza-ruby re-record and ship a new tag. Never touch a cassette, mock HTTP, or hand-roll a Req call to make a test pass. `scripts/fetch-cassettes.sh` fetches the pinned tag; a failure means the release has no tarball yet or GitHub is flaky (it retries).
 - **`mix format --check-formatted` and `mix test` before every commit.** `scripts/release-check` and CI run the same.
 - **Cassette contract.**
   - Cassettes come from the manza-ruby release pinned in `scripts/fetch-cassettes.sh` (`PINNED_TAG`, `cassettes-vX.Y.Z.tar.gz`; bump it on purpose), extracted to `testdata/cassettes/` (gitignored). They are recorded against `https://ma.manza.dev`.
@@ -71,9 +74,9 @@ Manza.PayeeTrustRequests.create(client, [external_account_id])
   - Cassette responses carry no `Content-Length`.
   - `test/support/fixture_ids.ex` must stay identical to manza-ruby's `spec/support/fixture_ids.rb` (same env var names, same placeholders). Add new ids to both.
 - **Hosts.** Default `https://ma.manza.finance`, South Africa `https://za.manza.finance`, staging and cassettes `https://ma.manza.dev`. Env vars: `MANZA_API_KEY`, `MANZA_BASE_URL`, `MANZA_API_VERSION`, read first; the legacy `ZAZU_*` names are a fallback for all of 1.x that logs a one-time deprecation warning per variable (`Manza.Client`).
-- **The error model is shared across the SDK family.** Adding an error kind (or class, elsewhere) means coordinating manza-ruby and manza-ts at minimum. The 10th is the conflict (409), here `kind: :conflict`.
+- **The error model is shared across the SDK family.** Adding an error kind (or class, elsewhere) means coordinating manza-ruby and manza-ts at minimum. The 10th is the conflict (409), here `kind: :conflict`. A break of the public API is made only on purpose, named in the CHANGELOG and released as a major.
 - **Signer.** `Manza.TransferAuthorization` must keep reproducing the two fixed vectors from manza-ruby's `spec/manza/transfer_authorization_spec.rb` (see `test/manza/transfer_authorization_test.exs`). Never sign the server's `signature_input` blindly: build it from your own record of the transfer.
-- **Release.** `bin/release` is byte-identical across the SDK repos and never edited in place. Repo-specific logic lives in `scripts/version` (reads/writes `@version` in `mix.exs`) and `scripts/release-check` (fetch cassettes, deps, format, test). `release.yml` gates on tag == `mix.exs` version.
+- **Release.** `bin/release` is byte-identical across the SDK repos and never edited in place (nor the release workflow's release-kit parts). Cut releases with it, never by hand-tagging: `release.yml` fails the publish when the tag differs from `@version`. Never run `mix hex.publish` locally; verify through CI. Repo-specific logic lives in `scripts/version` (reads/writes `@version` in `mix.exs`) and `scripts/release-check` (fetch cassettes, deps, format, test). `release.yml` gates on tag == `mix.exs` version.
 - **Hex has no OIDC trusted publishing.** `release.yml` publishes with the `HEX_API_KEY` secret on the `hex` GitHub environment (add required reviewers there for a human gate). Generate the key on https://hex.pm/dashboard/keys with API write permission (Hex 2.5 removed `mix hex.user key generate`). The `hex` environment and the secret must live on `getmanza/manza-elixir`, and the key's Hex account must own the package `manza`.
 - **Names.** Repo `getmanza/manza-elixir`, Hex package `manza`, app `:manza`, modules `Manza.*`. The old `zazu` Hex package is retired separately; never reintroduce `Zazu`/`ZAZU_` outside the env fallback and the CHANGELOG.
 - **Never escape backticks in PR bodies.** With `<<'EOF'` (single-quoted heredoc) the shell passes everything through verbatim. See "PR descriptions" below.
@@ -170,21 +173,25 @@ bin/release minor       # or patch (default), major, an explicit 0.4.0; --force 
 # -> release.yml workflow tests, checks tag == mix.exs version, runs mix hex.publish, creates the release
 ```
 
-## Models
+## Workflow
 
-Sessions run on `opus` (Opus 5.5) with `fable` (Fable 5.1) as the advisor (`.claude/settings.json`). Fable is spent where judgment matters most: ask for a plan on Fable (a `fable` subagent or `/model fable`); plan mode itself runs on Opus and asks the advisor. The advisor is consulted at decision points (before choosing an approach, a schema or public API, a migration, a dependency, anything irreversible, and when a failure repeats). The `fable-validator` agent checks every finished implementation before its pull request opens (`/lfg`, Phase 6.5). Agents pin their tier by alias, never by full model ID: `fable` for plans and validation; `opus` for orchestration, security, full PR review, payments and production debugging; `sonnet` for the implementation specialists and TDD; `haiku` for mechanical scans. Every spawned agent names its `model:`; a subagent whose definition names no model runs on `sonnet` (`CLAUDE_CODE_SUBAGENT_MODEL`), never on the session's model.
+- **Verify:** `MIX_ENV=test mix format --check-formatted` · `MIX_ENV=test mix test` (no Credo, no Dialyzer; `scripts/fetch-cassettes.sh` first if `testdata/cassettes/` is missing or stale)
+- **Specs:** fast loop `MIX_ENV=test mix test test/manza/<file>_test.exs`; full suite `MIX_ENV=test mix test` (replay: no network); two worktrees at once: yes, each fetches its own cassettes (`testdata/cassettes/` is gitignored)
+- **CI:** required none; job `test` (`ci.yml`, Elixir 1.18 / OTP 27, no matrix), check `cubic · AI code reviewer`; full suite on the PR; failure report none
+- **Review bot:** cubic; push back, citing this file, on mocks instead of cassettes, camelCased or atomized wire keys, hand-rolled Req calls, speculative abstractions
+- **Merge:** squash — `gh pr merge <PR> --squash --delete-branch`; fallback after the gate: `--admin` for the required approving review
+- **PR contract:** `## Summary` (`Closes #N`), `## Fable validation` (verdict, Not verified), `## Test plan`; backticks unescaped; labels none; screenshots none
+- **Conflicts:** `CHANGELOG.md` — both sides under `## [Unreleased]`, main's first; `mix.exs` `@version` — main's; `testdata/cassettes/**` is gitignored, never merged; `bin/release`, `release.yml` outside its `test` job — main's (release kit)
+- **Worktree setup:** `mix deps.get` and `scripts/fetch-cassettes.sh` (both gitignored output); undo none
+- **Release:** `bin/release [patch|minor|major|X.Y.Z]` from a clean, current main (`--dry-run` previews) → `release.yml` tests, checks tag == `@version`, publishes to Hex, creates the GitHub release; changelog `CHANGELOG.md`, `[Unreleased]` headed `## [X.Y.Z]` by hand
+- **Main health:** `gh run list --workflow ci.yml --branch main --event push --limit 1 --json conclusion,headSha`
+- **Upstream:** libraries we own `getmanza/*`; scrub none
 
-## Slash commands
+## Agent commands
 
-These live in `.claude/commands/` and are available in any Claude Code session:
+Plugin (`.claude/settings.json`): `/flow:lfg`, `/flow:plan`, `/flow:follow-through`, `/flow:finish-prs`, `/flow:github-review-pr` (`-failures`, `-comments`; cubic's threads included), `/flow:review-pr`, `/flow:tdd`, `/flow:debug-flaky`, the `flow:fable-validator` agent. No local commands.
 
-| Command | When |
-|---|---|
-| `/lfg <issue or feature>` | Full autonomous workflow with TDD + verification |
-| `/github-review-pr <PR#>` | Full PR review pass: failures first, then comments |
-| `/github-review-failures <PR#>` | Just fix CI failures on a PR |
-| `/github-review-comments <PR#>` | Just respond to reviewer comments on a PR |
-| `/coderabbit-review <PR#>` | Specifically address CodeRabbit findings (verify, fix valid, push back on stale/wrong) |
+**Models.** Sessions run on `opus` with `fable` as the advisor (`.claude/settings.json`); consult it before choosing an approach, a public API, a dependency, anything irreversible, and when a failure repeats. Every spawned agent names its `model:`; one that does not runs on `sonnet` (`CLAUDE_CODE_SUBAGENT_MODEL`), never on the session's model.
 
 ## Cross-SDK contract
 
