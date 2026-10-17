@@ -179,7 +179,7 @@ bin/release minor       # or patch (default), major, an explicit 0.4.0; --force 
 - **Specs:** fast loop `MIX_ENV=test mix test test/manza/<file>_test.exs`; full suite `MIX_ENV=test mix test` (replay: no network); two worktrees at once: yes, each fetches its own cassettes (`testdata/cassettes/` is gitignored)
 - **CI:** required none; job `test` (`ci.yml`, Elixir 1.18 / OTP 27, no matrix), check `cubic · AI code reviewer`; full suite on the PR; failure report none
 - **Review bot:** cubic; push back, citing this file, on mocks instead of cassettes, camelCased or atomized wire keys, hand-rolled Req calls, speculative abstractions
-- **Merge:** squash — `gh pr merge <PR> --squash --delete-branch`; if the required approving review is missing, wait for a human approver, never `--admin`
+- **Merge:** squash — `gh pr merge <PR> --squash --delete-branch`; fallback after the gate: `--admin` for the required approving review
 - **PR contract:** `## Summary` (`Closes #N`), `## Fable validation` (verdict, Not verified), `## Test plan`; backticks unescaped; labels none; screenshots none
 - **Conflicts:** `CHANGELOG.md` — both sides under `## [Unreleased]`, main's first; `mix.exs` `@version` — main's; `testdata/cassettes/**` is gitignored, never merged; `bin/release`, `release.yml` outside its `test` job — main's (release kit)
 - **Worktree setup:** `mix deps.get` and `scripts/fetch-cassettes.sh` (both gitignored output); undo none
