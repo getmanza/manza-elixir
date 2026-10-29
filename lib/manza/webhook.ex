@@ -26,7 +26,8 @@ defmodule Manza.Webhook do
       (default `300`); anything else raises `ArgumentError`. `nil` skips the
       timestamp check: only to replay a captured delivery in a local tool or
       test, never on a live endpoint.
-    * `:now` — the current time in Unix seconds (default: the system clock).
+    * `:now` — the current time in Unix seconds, an integer (default: the
+      system clock); anything else raises `ArgumentError`.
   """
 
   @default_tolerance 300
@@ -46,11 +47,11 @@ defmodule Manza.Webhook do
   @doc """
   `true` when the signature matches (constant time) and the timestamp is
   within the tolerance of now. Returns `false` on any bad input; only an
-  invalid `:tolerance` option raises `ArgumentError`.
+  invalid `:tolerance` or `:now` option raises `ArgumentError`.
   """
   @spec verify?(term(), term(), term(), term(), keyword()) :: boolean()
   def verify?(payload, signature, timestamp, secret, opts \\ []) do
-    validate_tolerance!(opts)
+    validate_opts!(opts)
 
     signature_matches?(payload, signature, timestamp, secret) and
       timestamp_fresh?(timestamp, opts)
@@ -72,7 +73,7 @@ defmodule Manza.Webhook do
   @spec construct_event(String.t(), map() | [{term(), term()}], String.t(), keyword()) ::
           {:ok, map()} | {:error, ArgumentError.t()}
   def construct_event(payload, headers, secret, opts \\ []) do
-    validate_tolerance!(opts)
+    validate_opts!(opts)
     normalized = normalize_headers(headers)
 
     with {:ok, signature} <- header(normalized, "signature"),
@@ -107,14 +108,20 @@ defmodule Manza.Webhook do
   defp signature_matches?(_payload, _signature, _timestamp, _secret), do: false
 
   # A misspelt tolerance ("300") must never pass every timestamp.
-  defp validate_tolerance!(opts) do
-    case Keyword.get(opts, :tolerance, @default_tolerance) do
-      tolerance when is_integer(tolerance) or is_nil(tolerance) ->
-        :ok
+  defp validate_opts!(opts) do
+    tolerance = Keyword.get(opts, :tolerance, @default_tolerance)
 
-      tolerance ->
-        raise ArgumentError,
-              "tolerance must be an integer number of seconds or nil, got: #{inspect(tolerance)}"
+    unless is_integer(tolerance) or is_nil(tolerance) do
+      raise ArgumentError,
+            "tolerance must be an integer number of seconds or nil, got: #{inspect(tolerance)}"
+    end
+
+    case Keyword.fetch(opts, :now) do
+      {:ok, now} when not is_integer(now) ->
+        raise ArgumentError, "now must be Unix seconds (an integer), got: #{inspect(now)}"
+
+      _ ->
+        :ok
     end
   end
 
@@ -165,7 +172,8 @@ defmodule Manza.Webhook do
         |> String.replace("_", "-")
         |> String.downcase()
 
-      Map.put_new(acc, key, first_value(value))
+      # The last of a repeated name wins, as in manza-ruby.
+      Map.put(acc, key, first_value(value))
     end)
   end
 
@@ -177,7 +185,7 @@ defmodule Manza.Webhook do
     # manza-ruby.
     value =
       case normalized["x-manza-" <> suffix] do
-        nil -> present(normalized["x-zazu-" <> suffix])
+        missing when missing in [nil, false] -> present(normalized["x-zazu-" <> suffix])
         manza -> present(manza)
       end
 

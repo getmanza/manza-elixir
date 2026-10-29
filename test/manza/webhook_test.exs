@@ -84,6 +84,12 @@ defmodule Manza.WebhookTest do
       end
     end
 
+    test "raises ArgumentError on a now that is not Unix seconds" do
+      for now <- [nil, "1767225600", ~U[2026-01-01 00:00:00Z]] do
+        assert_raise ArgumentError, ~r/now/, fn -> verify(now: now) end
+      end
+    end
+
     test "honours a custom tolerance" do
       assert verify(now: @now + 60, tolerance: 30) == false
       assert verify(now: @now + 60, tolerance: 60) == true
@@ -206,6 +212,28 @@ defmodule Manza.WebhookTest do
 
       assert {:error, %ArgumentError{message: "missing X-Manza-Signature header"}} =
                construct(headers)
+    end
+
+    test "reads the last of a repeated header name, like manza-ruby" do
+      headers = [
+        {"X-Manza-Signature", String.duplicate("0", 64)},
+        {"x-manza-signature", @signature},
+        {"x-manza-timestamp", @timestamp}
+      ]
+
+      assert {:ok, %{"event" => "test.ping"}} = construct(headers)
+    end
+
+    test "falls back to X-Zazu-* when X-Manza-* is nil or false" do
+      for missing <- [nil, false] do
+        headers = %{
+          "X-Manza-Signature" => missing,
+          "X-Zazu-Signature" => @signature,
+          "X-Manza-Timestamp" => @timestamp
+        }
+
+        assert {:ok, %{"event" => "test.ping"}} = construct(headers)
+      end
     end
 
     test "fails on nil headers" do
