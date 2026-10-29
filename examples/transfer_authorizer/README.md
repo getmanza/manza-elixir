@@ -74,7 +74,7 @@ The authorizer (`mix authorizer`):
 | Line | Meaning |
 |---|---|
 | `received payment.authorization_requested (…), signature verified` | The delivery's `X-Manza-Signature` matches and its timestamp is fresh |
-| `rejected a delivery: …` | Bad signature, stale timestamp, missing header, or a body that is not a JSON object: answered 401. A body over the read limit is answered 413, one that times out 408, an unreadable one 400 |
+| `rejected a delivery: …` | Bad signature, stale timestamp, missing header, or a body that is not a JSON object: answered 401. A body over the read limit is answered 413, an unreadable one 400 (a body that never arrives is answered 408 by Bandit itself) |
 | `ignoring …` | Any other event: answered 200, nothing done |
 | `ledger match for …` | The draft's id, amount, currency, account and payee match `ledger.json` |
 | `new payee ext:…, will be trusted on authorize` | The webhook's `payment.payee_trusted` is `false`: *Approve transfers to new payees* is on and these bank details were never trusted. The authorize trusts them |

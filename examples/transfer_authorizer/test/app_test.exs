@@ -377,6 +377,33 @@ defmodule TransferAuthorizer.AppTest do
     end
   end
 
+  # An adapter whose body read fails, as a dropped connection does.
+  defmodule UnreadableBody do
+    @behaviour Plug.Conn.Adapter
+    def read_req_body(_state, _opts), do: {:error, :closed}
+    def send_resp(state, _status, _headers, body), do: {:ok, body, state}
+    def get_peer_data(_state), do: %{address: {127, 0, 0, 1}, port: 0, ssl_cert: nil}
+    def get_http_protocol(_state), do: :"HTTP/1.1"
+    def send_file(state, _status, _headers, _path, _offset, _length), do: {:ok, nil, state}
+    def send_chunked(state, _status, _headers), do: {:ok, nil, state}
+    def chunk(_state, _body), do: :ok
+    def inform(_state, _status, _headers), do: :ok
+    def upgrade(_state, _protocol, _opts), do: {:error, :not_supported}
+    def push(_state, _path, _headers), do: {:error, :not_supported}
+    def get_sock_data(_state), do: %{address: {127, 0, 0, 1}, port: 0}
+    def get_ssl_data(_state), do: nil
+  end
+
+  describe "with a body that cannot be read" do
+    test "answers 400 and calls nothing", %{opts: opts} do
+      conn = %{conn(:post, "/", "") | adapter: {UnreadableBody, nil}}
+
+      log = capture_log(fn -> assert App.call(conn, App.init(opts)).status == 400 end)
+
+      assert log =~ "rejected a delivery: could not read the body (:closed)"
+    end
+  end
+
   describe "with another event" do
     test "answers 200 and calls nothing", %{opts: opts} do
       body =

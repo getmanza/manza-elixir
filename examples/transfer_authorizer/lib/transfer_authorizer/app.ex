@@ -73,10 +73,6 @@ defmodule TransferAuthorizer.App do
         Logger.warning("rejected a delivery: body over the read limit")
         respond(conn, 413)
 
-      {:error, :timeout} ->
-        Logger.warning("rejected a delivery: timed out reading the body")
-        respond(conn, 408)
-
       {:error, reason} ->
         Logger.warning("rejected a delivery: could not read the body (#{inspect(reason)})")
         respond(conn, 400)
