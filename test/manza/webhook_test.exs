@@ -78,6 +78,12 @@ defmodule Manza.WebhookTest do
       assert verify(now: @now + 86_400, tolerance: nil) == true
     end
 
+    test "raises ArgumentError on a tolerance that is neither an integer nor nil" do
+      for tolerance <- ["300", :infinity, 1.5] do
+        assert_raise ArgumentError, ~r/tolerance/, fn -> verify(tolerance: tolerance) end
+      end
+    end
+
     test "honours a custom tolerance" do
       assert verify(now: @now + 60, tolerance: 30) == false
       assert verify(now: @now + 60, tolerance: 60) == true
@@ -110,12 +116,20 @@ defmodule Manza.WebhookTest do
 
     # Ruby's Integer(s, 10), which every SDK's verifier mirrors.
     test "reads a timestamp with surrounding whitespace or digit separators like manza-ruby" do
-      for timestamp <- [" 1767225600 ", "1_767_225_600", "+1767225600"] do
+      for timestamp <- [" 1767225600 ", "\t1767225600\r\n", "1_767_225_600", "+1767225600"] do
         signature = Webhook.sign(@payload, timestamp, @secret)
         assert verify(timestamp: timestamp, signature: signature) == true, inspect(timestamp)
       end
 
-      for timestamp <- ["", "1767225600.0", "1__767225600", "_1767225600", "0x10"] do
+      for timestamp <- [
+            "",
+            "1767225600.0",
+            "1__767225600",
+            "_1767225600",
+            "0x10",
+            "\u00a01767225600",
+            "\u30001767225600"
+          ] do
         signature = Webhook.sign(@payload, timestamp, @secret)
 
         assert verify(timestamp: timestamp, signature: signature, tolerance: nil) == false,
@@ -181,6 +195,22 @@ defmodule Manza.WebhookTest do
       }
 
       assert {:ok, %{"event" => "test.ping"}} = construct(headers)
+    end
+
+    test "keeps an empty X-Manza-* header over X-Zazu-*, like manza-ruby" do
+      headers = %{
+        "X-Manza-Signature" => "",
+        "X-Zazu-Signature" => @signature,
+        "X-Manza-Timestamp" => @timestamp
+      }
+
+      assert {:error, %ArgumentError{message: "missing X-Manza-Signature header"}} =
+               construct(headers)
+    end
+
+    test "fails on nil headers" do
+      assert {:error, %ArgumentError{message: "missing X-Manza-Signature header"}} =
+               construct(nil)
     end
 
     test "fails on a missing signature header" do

@@ -22,9 +22,10 @@ defmodule Manza.Webhook do
 
   ## Options
 
-    * `:tolerance` — seconds the timestamp may be off from `:now` (default
-      `300`). `nil` skips the timestamp check: only to replay a captured
-      delivery in a local tool or test, never on a live endpoint.
+    * `:tolerance` — seconds (an integer) the timestamp may be off from `:now`
+      (default `300`); anything else raises `ArgumentError`. `nil` skips the
+      timestamp check: only to replay a captured delivery in a local tool or
+      test, never on a live endpoint.
     * `:now` — the current time in Unix seconds (default: the system clock).
   """
 
@@ -44,10 +45,13 @@ defmodule Manza.Webhook do
 
   @doc """
   `true` when the signature matches (constant time) and the timestamp is
-  within the tolerance of now. Never raises on bad input; returns `false`.
+  within the tolerance of now. Returns `false` on any bad input; only an
+  invalid `:tolerance` option raises `ArgumentError`.
   """
   @spec verify?(term(), term(), term(), term(), keyword()) :: boolean()
   def verify?(payload, signature, timestamp, secret, opts \\ []) do
+    validate_tolerance!(opts)
+
     signature_matches?(payload, signature, timestamp, secret) and
       timestamp_fresh?(timestamp, opts)
   end
@@ -68,6 +72,7 @@ defmodule Manza.Webhook do
   @spec construct_event(String.t(), map() | [{term(), term()}], String.t(), keyword()) ::
           {:ok, map()} | {:error, ArgumentError.t()}
   def construct_event(payload, headers, secret, opts \\ []) do
+    validate_tolerance!(opts)
     normalized = normalize_headers(headers)
 
     with {:ok, signature} <- header(normalized, "signature"),
@@ -101,6 +106,18 @@ defmodule Manza.Webhook do
 
   defp signature_matches?(_payload, _signature, _timestamp, _secret), do: false
 
+  # A misspelt tolerance ("300") must never pass every timestamp.
+  defp validate_tolerance!(opts) do
+    case Keyword.get(opts, :tolerance, @default_tolerance) do
+      tolerance when is_integer(tolerance) or is_nil(tolerance) ->
+        :ok
+
+      tolerance ->
+        raise ArgumentError,
+              "tolerance must be an integer number of seconds or nil, got: #{inspect(tolerance)}"
+    end
+  end
+
   defp timestamp_fresh?(timestamp, opts) do
     case Keyword.get(opts, :tolerance, @default_tolerance) do
       nil ->
@@ -115,13 +132,12 @@ defmodule Manza.Webhook do
 
   defp parse_timestamp(timestamp) when is_integer(timestamp), do: timestamp
 
-  # What Ruby's Integer(timestamp, 10) accepts: surrounding whitespace, a sign,
-  # and single underscores between digits.
+  # What Ruby's Integer(timestamp, 10) accepts: surrounding ASCII whitespace,
+  # a sign, and single underscores between digits.
   defp parse_timestamp(timestamp) when is_binary(timestamp) do
-    trimmed = String.trim(timestamp)
-
-    if Regex.match?(~r/\A[+-]?\d+(?:_\d+)*\z/, trimmed) do
-      trimmed |> String.replace("_", "") |> String.to_integer()
+    case Regex.run(~r/\A[\x09-\x0D\x20]*([+-]?[0-9]+(?:_[0-9]+)*)[\x09-\x0D\x20]*\z/, timestamp) do
+      [_match, digits] -> digits |> String.replace("_", "") |> String.to_integer()
+      nil -> nil
     end
   end
 
@@ -137,6 +153,8 @@ defmodule Manza.Webhook do
   end
 
   defp secure_compare(_left, _right), do: false
+
+  defp normalize_headers(nil), do: %{}
 
   defp normalize_headers(headers) do
     Enum.reduce(headers, %{}, fn {name, value}, acc ->
@@ -155,8 +173,13 @@ defmodule Manza.Webhook do
   defp first_value(value), do: value
 
   defp header(normalized, suffix) do
+    # An X-Manza-* header that is present but empty does not fall back, as in
+    # manza-ruby.
     value =
-      present(normalized["x-manza-" <> suffix]) || present(normalized["x-zazu-" <> suffix])
+      case normalized["x-manza-" <> suffix] do
+        nil -> present(normalized["x-zazu-" <> suffix])
+        manza -> present(manza)
+      end
 
     if value,
       do: {:ok, value},
