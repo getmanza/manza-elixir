@@ -2,4 +2,7 @@
 /deps/
 .env
 ledger.json
+ledger.json.lock
 ledger.json.*.tmp
+/tmp/
+erl_crash.dump

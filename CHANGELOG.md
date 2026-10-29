@@ -16,9 +16,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `examples/transfer_authorizer/`: a runnable two-key transfer authorizer (a Plug served by Bandit, `mix authorizer`), a creator (`mix create_transfer`), a preflight that checks every setup step and prints the fix (`mix preflight`) and a JSON ledger. Its own Mix project with its own dependencies, tested in CI, not in the published package
 - README: "Setup, step by step" for machine-authorized transfers, and the verifier
 
+### Changed
+
+- Cassettes are pinned to manza-ruby `v1.3.0`: the payment cassettes moved from `transfer_drafts/` to `payments/` and match `/api/payments…`; `payments/create` and `beneficiaries/create` match new request bodies; new fixture ids for the refused and new-payee drafts
+
 ### Deprecated
 
 - `Manza.TransferDrafts`: a soft-deprecated alias of `Manza.Payments` for all of 1.x. Every function delegates, so it calls `/api/payments` too. The deprecation shows in the docs and emits no compile warning
+
+## [1.0.0]
 
 ### Changed
 
@@ -26,7 +32,6 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Requests send the `Manza-Version` header (was `Zazu-Version`) and `User-Agent: manza-elixir/<version>`
 - Config reads `MANZA_API_KEY`, `MANZA_BASE_URL` and `MANZA_API_VERSION` first, then falls back to the old `ZAZU_*` names with a one-time deprecation warning per variable. The fallback stays for all of 1.x
 - Cassettes are fetched from `getmanza/manza-ruby`, pinned to `v1.0.0`; the fixture env vars are `MANZA_FIXTURE_*` (no fallback, dev-only)
-- Cassettes are pinned to manza-ruby `v1.3.0`: the payment cassettes moved from `transfer_drafts/` to `payments/` and match `/api/payments…`; `payments/create` and `beneficiaries/create` match new request bodies; new fixture ids for the refused and new-payee drafts
 
 ### Migration from `zazu` 0.x
 

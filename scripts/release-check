@@ -8,3 +8,5 @@ scripts/fetch-cassettes.sh   # the replay tests need the manza-ruby cassette tar
 mix deps.get
 mix format --check-formatted
 mix test
+# The example is its own Mix project; CI runs its tests too.
+(cd examples/transfer_authorizer && mix deps.get && mix test)

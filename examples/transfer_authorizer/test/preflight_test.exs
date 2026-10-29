@@ -203,6 +203,25 @@ defmodule TransferAuthorizer.PreflightTest do
     assert failure =~ "rotates the secret"
   end
 
+  test "fails when key A cannot read the account", %{bypass: bypass, env: env} do
+    serve(bypass, %{"/api/accounts/#{@account_id}" => error(403, "insufficient_scope")})
+    {_, output} = run(env)
+
+    assert hd(failures(output)) =~ "key A"
+    assert hd(failures(output)) =~ "accounts:read"
+  end
+
+  test "fails when key A cannot read the enrolled webhook endpoint", %{bypass: bypass, env: env} do
+    serve(bypass, %{
+      "/api/webhook_endpoints/#{@endpoint_id}" => error(403, "insufficient_scope")
+    })
+
+    {_, output} = run(env)
+
+    assert hd(failures(output)) =~ "key A"
+    assert hd(failures(output)) =~ "webhook_endpoints:read"
+  end
+
   test "fails when the account's currency is not the enrolled one", %{bypass: bypass, env: env} do
     serve(bypass, %{
       "/api/accounts/#{@account_id}" => {200, %{"id" => @account_id, "currency_code" => "ZAR"}}

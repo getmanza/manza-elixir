@@ -87,7 +87,7 @@ The authorizer (`mix authorizer`):
 
 The authorizer answers the webhook with 200 straight away and does the ledger check, signing and authorize in a `Task`: the delivery has a timeout, and a retried webhook is safe because authorize replays idempotently. It waits up to 10 seconds for the ledger entry, because the webhook can arrive before `mix create_transfer` has written it.
 
-The ledger is written to a temporary file and renamed into place, so the authorizer never reads half an entry. Run one `mix create_transfer` at a time: two at once can lose an entry, and the authorizer then declines that transfer.
+The ledger is written to a temporary file and renamed into place, so the authorizer never reads half an entry; concurrent `mix create_transfer` runs take turns on `ledger.json.lock`. If one is killed mid-write the lock stays behind and the next run says so after 10 seconds: remove the file.
 
 ## Tests
 

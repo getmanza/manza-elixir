@@ -19,4 +19,15 @@ defmodule TransferAuthorizer.LedgerTest do
     assert Ledger.find(path, "po_2")["payment_id"] == "p2"
     assert Path.wildcard(Path.join(dir, "*.tmp")) == []
   end
+
+  test "serialises concurrent writers, so no entry is lost", %{tmp_dir: dir} do
+    path = Path.join(dir, "ledger.json")
+
+    1..20
+    |> Enum.map(fn n -> Task.async(fn -> Ledger.record(path, "po_#{n}", %{"n" => n}) end) end)
+    |> Task.await_many()
+
+    for n <- 1..20, do: assert(Ledger.find(path, "po_#{n}") == %{"n" => n})
+    refute File.exists?(path <> ".lock")
+  end
 end
