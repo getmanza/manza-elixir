@@ -73,6 +73,10 @@ defmodule TransferAuthorizer.App do
         Logger.warning("rejected a delivery: body over the read limit")
         respond(conn, 413)
 
+      {:error, :timeout} ->
+        Logger.warning("rejected a delivery: timed out reading the body")
+        respond(conn, 408)
+
       {:error, reason} ->
         Logger.warning("rejected a delivery: could not read the body (#{inspect(reason)})")
         respond(conn, 400)
@@ -275,6 +279,9 @@ defmodule TransferAuthorizer.App do
   defp request_id(error), do: Map.get(error, :request_id)
 
   defp respond(conn, 200), do: conn |> put_resp_content_type("text/plain") |> send_resp(200, "ok")
+
+  defp respond(conn, 401),
+    do: conn |> put_resp_content_type("text/plain") |> send_resp(401, "unauthorized")
 
   defp respond(conn, status),
     do:

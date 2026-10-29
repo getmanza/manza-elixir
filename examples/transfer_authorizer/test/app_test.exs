@@ -351,7 +351,10 @@ defmodule TransferAuthorizer.AppTest do
     test "answers 401 and calls nothing", %{opts: opts} do
       log =
         capture_log(fn ->
-          assert deliver(opts, Jason.encode!(@payload), String.duplicate("0", 64)).status == 401
+          conn = deliver(opts, Jason.encode!(@payload), String.duplicate("0", 64))
+          assert conn.status == 401
+          # The body manza-ruby's example answers.
+          assert conn.resp_body == "unauthorized"
         end)
 
       assert log =~ "rejected a delivery: invalid webhook signature"
