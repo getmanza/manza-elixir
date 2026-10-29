@@ -111,32 +111,33 @@ defmodule Manza.ResourcesTest do
              Manza.WebhookEndpoints.get(client, fixture_id("MANZA_FIXTURE_WEBHOOK_ID"))
   end
 
-  describe "transfer drafts" do
-    test "create carries the client_reference" do
-      client = CassetteReplay.replay_client(["transfer_drafts/create"])
+  describe "payments" do
+    test "create carries the client_reference and sends the challenge" do
+      client = CassetteReplay.replay_client(["payments/create"])
 
       assert {:ok, resp} =
-               Manza.TransferDrafts.create(client, %{
+               Manza.Payments.create(client, %{
                  "account_id" => fixture_id("MANZA_FIXTURE_ACCOUNT_ID"),
                  "beneficiary_id" => fixture_id("MANZA_FIXTURE_BENEFICIARY_ID"),
-                 "amount" => "150.00",
+                 "amount" => "10.00",
                  "payment_reference" => "SDK fixture",
+                 "internal_notes" => "[zazu-ruby-fixture] create spec - do not approve",
                  "client_reference" => fixture_id("MANZA_FIXTURE_CLIENT_REFERENCE")
                })
 
       assert resp.status == 201
-      # Awaiting approval — the API never executes a transfer itself.
       assert resp.body["status"] == "requested"
       assert resp.body["client_reference"] == fixture_id("MANZA_FIXTURE_CLIENT_REFERENCE")
-      assert Map.has_key?(resp.body, "authorization")
+      # Inside the envelope: the challenge went to the authorizer.
+      assert resp.body["authorization"]["status"] == "pending"
       assert resp.body["transfer"] == nil
     end
 
     test "create with a duplicate client_reference returns a conflict naming the draft" do
-      client = CassetteReplay.replay_client(["transfer_drafts/create_duplicate"])
+      client = CassetteReplay.replay_client(["payments/create_duplicate"])
 
       assert {:error, %Manza.Error{} = error} =
-               Manza.TransferDrafts.create(client, %{
+               Manza.Payments.create(client, %{
                  "account_id" => fixture_id("MANZA_FIXTURE_ACCOUNT_ID"),
                  "beneficiary_id" => fixture_id("MANZA_FIXTURE_BENEFICIARY_ID"),
                  "amount" => "10.00",
@@ -150,14 +151,25 @@ defmodule Manza.ResourcesTest do
     end
 
     test "get" do
-      client = CassetteReplay.replay_client(["transfer_drafts/get"])
+      client = CassetteReplay.replay_client(["payments/get"])
 
       assert {:ok, got} =
-               Manza.TransferDrafts.get(client, fixture_id("MANZA_FIXTURE_TRANSFER_DRAFT_ID"))
+               Manza.Payments.get(client, fixture_id("MANZA_FIXTURE_TRANSFER_DRAFT_ID"))
 
       assert is_binary(got.body["id"])
       assert Map.has_key?(got.body, "status")
       assert Map.has_key?(got.body, "transfer")
+    end
+
+    test "get for a draft refused at create time carries the refusal reason" do
+      client = CassetteReplay.replay_client(["payments/get_refused"])
+      id = fixture_id("MANZA_FIXTURE_REFUSED_DRAFT_ID")
+
+      assert {:ok, got} = Manza.Payments.get(client, id)
+
+      assert got.body["id"] == id
+      assert got.body["authorization"]["status"] == "refused"
+      assert got.body["authorization"]["refusal_reason"] == "over_transfer_limit"
     end
 
     test "authorize refuses a blank signature without calling the API" do
@@ -165,7 +177,7 @@ defmodule Manza.ResourcesTest do
 
       for blank <- ["", " ", nil] do
         assert {:error, %Manza.ConfigurationError{message: message}} =
-                 Manza.TransferDrafts.authorize(client, "draft", "auth", blank)
+                 Manza.Payments.authorize(client, "draft", "auth", blank)
 
         assert message =~ "signature"
       end
@@ -174,14 +186,14 @@ defmodule Manza.ResourcesTest do
     test "decline omits reason when absent" do
       bypass = Bypass.open()
 
-      Bypass.expect_once(bypass, "POST", "/api/transfer_drafts/d1/decline", fn conn ->
+      Bypass.expect_once(bypass, "POST", "/api/payments/d1/decline", fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         assert Jason.decode!(body) == %{"authorization_id" => "a1"}
         Plug.Conn.send_resp(conn, 200, ~s({"status":"declined"}))
       end)
 
       client = Manza.new!(api_key: "test", base_url: "http://localhost:#{bypass.port}")
-      assert {:ok, _resp} = Manza.TransferDrafts.decline(client, "d1", "a1")
+      assert {:ok, _resp} = Manza.Payments.decline(client, "d1", "a1")
     end
 
     # Order matters while recording (five consecutive bad signatures suspend
@@ -189,12 +201,10 @@ defmodule Manza.ResourcesTest do
     # authorize cassettes share method + URI.
     test "authorize with a bad signature is a validation error" do
       client =
-        CassetteReplay.replay_client(["transfer_drafts/authorize_bad_signature"],
-          ignore_signature: true
-        )
+        CassetteReplay.replay_client(["payments/authorize_bad_signature"], ignore_signature: true)
 
       assert {:error, %Manza.Error{kind: :validation, type: "invalid_signature"}} =
-               Manza.TransferDrafts.authorize(
+               Manza.Payments.authorize(
                  client,
                  fixture_id("MANZA_FIXTURE_BAD_SIGNATURE_DRAFT_ID"),
                  fixture_id("MANZA_FIXTURE_BAD_SIGNATURE_AUTHORIZATION_ID"),
@@ -204,12 +214,10 @@ defmodule Manza.ResourcesTest do
 
     test "authorize with the creating key is forbidden" do
       client =
-        CassetteReplay.replay_client(["transfer_drafts/authorize_same_key"],
-          ignore_signature: true
-        )
+        CassetteReplay.replay_client(["payments/authorize_same_key"], ignore_signature: true)
 
       assert {:error, %Manza.Error{kind: :forbidden, type: "same_key_forbidden"}} =
-               Manza.TransferDrafts.authorize(
+               Manza.Payments.authorize(
                  client,
                  fixture_id("MANZA_FIXTURE_AUTHORIZABLE_DRAFT_ID"),
                  fixture_id("MANZA_FIXTURE_AUTHORIZABLE_AUTHORIZATION_ID"),
@@ -218,9 +226,7 @@ defmodule Manza.ResourcesTest do
     end
 
     test "authorize executes the draft" do
-      client =
-        CassetteReplay.replay_client(["transfer_drafts/authorize"], ignore_signature: true)
-
+      client = CassetteReplay.replay_client(["payments/authorize"], ignore_signature: true)
       draft_id = fixture_id("MANZA_FIXTURE_AUTHORIZABLE_DRAFT_ID")
 
       input =
@@ -242,7 +248,7 @@ defmodule Manza.ResourcesTest do
       signature = Manza.TransferAuthorization.sign("replay-secret", input)
 
       assert {:ok, resp} =
-               Manza.TransferDrafts.authorize(
+               Manza.Payments.authorize(
                  client,
                  draft_id,
                  fixture_id("MANZA_FIXTURE_AUTHORIZABLE_AUTHORIZATION_ID"),
@@ -254,11 +260,45 @@ defmodule Manza.ResourcesTest do
       assert resp.body["authorization"]["status"] == "authorized"
     end
 
-    test "decline declines the challenge" do
-      client = CassetteReplay.replay_client(["transfer_drafts/decline"])
+    # The fresh bank account was never trusted; with "Approve transfers to new
+    # payees" on, the authorizer approves it and the signature trusts it.
+    test "authorize a transfer to a new payee executes the draft" do
+      client =
+        CassetteReplay.replay_client(["payments/authorize_new_payee"], ignore_signature: true)
+
+      draft_id = fixture_id("MANZA_FIXTURE_NEW_PAYEE_DRAFT_ID")
+
+      input =
+        Manza.TransferAuthorization.signature_input(
+          draft_id,
+          fixture_id("MANZA_FIXTURE_NEW_PAYEE_NONCE"),
+          "10.0",
+          "MAD",
+          fixture_id("MANZA_FIXTURE_ACCOUNT_ID"),
+          Manza.TransferAuthorization.payee_for(
+            external_account_id: fixture_id("MANZA_FIXTURE_EXTERNAL_ACCOUNT_ID")
+          ),
+          fixture_id("MANZA_FIXTURE_NEW_PAYEE_CLIENT_REFERENCE")
+        )
 
       assert {:ok, resp} =
-               Manza.TransferDrafts.decline(
+               Manza.Payments.authorize(
+                 client,
+                 draft_id,
+                 fixture_id("MANZA_FIXTURE_NEW_PAYEE_AUTHORIZATION_ID"),
+                 Manza.TransferAuthorization.sign("replay-secret", input)
+               )
+
+      assert resp.status == 200
+      assert resp.body["id"] == draft_id
+      assert resp.body["authorization"]["status"] == "authorized"
+    end
+
+    test "decline declines the challenge" do
+      client = CassetteReplay.replay_client(["payments/decline"])
+
+      assert {:ok, resp} =
+               Manza.Payments.decline(
                  client,
                  fixture_id("MANZA_FIXTURE_DECLINABLE_DRAFT_ID"),
                  fixture_id("MANZA_FIXTURE_DECLINABLE_AUTHORIZATION_ID"),
@@ -268,7 +308,84 @@ defmodule Manza.ResourcesTest do
       assert resp.status == 200
       assert resp.body["id"] == fixture_id("MANZA_FIXTURE_DECLINABLE_AUTHORIZATION_ID")
       assert resp.body["status"] == "declined"
+      assert resp.body["refusal_reason"] == nil
       assert is_binary(resp.body["declined_at"])
+    end
+  end
+
+  describe "transfer drafts (deprecated alias of payments)" do
+    test "get calls /api/payments" do
+      client = CassetteReplay.replay_client(["payments/get"])
+      id = fixture_id("MANZA_FIXTURE_TRANSFER_DRAFT_ID")
+
+      assert {:ok, got} = Manza.TransferDrafts.get(client, id)
+      assert is_binary(got.body["id"])
+    end
+
+    test "create, authorize and decline call /api/payments" do
+      client = CassetteReplay.replay_client(["payments/create_duplicate"])
+
+      assert {:error, %Manza.Error{kind: :conflict}} =
+               Manza.TransferDrafts.create(client, %{
+                 "account_id" => fixture_id("MANZA_FIXTURE_ACCOUNT_ID"),
+                 "beneficiary_id" => fixture_id("MANZA_FIXTURE_BENEFICIARY_ID"),
+                 "amount" => "10.00",
+                 "client_reference" => fixture_id("MANZA_FIXTURE_AUTHORIZABLE_CLIENT_REFERENCE")
+               })
+
+      client = CassetteReplay.replay_client(["payments/decline"])
+
+      assert {:ok, %{status: 200}} =
+               Manza.TransferDrafts.decline(
+                 client,
+                 fixture_id("MANZA_FIXTURE_DECLINABLE_DRAFT_ID"),
+                 fixture_id("MANZA_FIXTURE_DECLINABLE_AUTHORIZATION_ID"),
+                 "SDK fixture"
+               )
+
+      client =
+        CassetteReplay.replay_client(["payments/authorize_same_key"], ignore_signature: true)
+
+      assert {:error, %Manza.Error{kind: :forbidden}} =
+               Manza.TransferDrafts.authorize(
+                 client,
+                 fixture_id("MANZA_FIXTURE_AUTHORIZABLE_DRAFT_ID"),
+                 fixture_id("MANZA_FIXTURE_AUTHORIZABLE_AUTHORIZATION_ID"),
+                 String.duplicate("0", 64)
+               )
+    end
+  end
+
+  describe "transfer authorizer" do
+    test "get returns the enrolled authorizer's status, limits and usage" do
+      client = CassetteReplay.replay_client(["transfer_authorizer/get"])
+
+      assert {:ok, resp} = Manza.TransferAuthorizer.get(client)
+
+      assert resp.status == 200
+      assert resp.body["status"] == "active"
+      assert resp.body["suspension_reason"] == nil
+      assert resp.body["currency_code"] == "MAD"
+
+      for key <-
+            ~w(per_transfer_limit daily_limit daily_authorized_total secret_expires_at webhook_endpoint_id enrolled_at) do
+        assert Map.has_key?(resp.body, key), "missing #{key}"
+      end
+    end
+
+    test "get maps a 404 (none enrolled) to :not_found" do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "GET", "/api/transfer_authorizer", fn conn ->
+        Plug.Conn.send_resp(
+          conn,
+          404,
+          ~s({"error":{"type":"not_found_error","message":"Not found"}})
+        )
+      end)
+
+      client = Manza.new!(api_key: "test", base_url: "http://localhost:#{bypass.port}")
+      assert {:error, %Manza.Error{kind: :not_found}} = Manza.TransferAuthorizer.get(client)
     end
   end
 
@@ -293,7 +410,7 @@ defmodule Manza.ResourcesTest do
       assert {:ok, resp} =
                Manza.Beneficiaries.create(client, %{
                  "beneficiary_type" => "business",
-                 "company_name" => "Zazu Fixture Beneficiary - spec (zazu-ruby-fixture)",
+                 "company_name" => "Manza Fixture Beneficiary spec",
                  "email" => "fixture-beneficiary-spec@example.com"
                })
 
@@ -327,6 +444,22 @@ defmodule Manza.ResourcesTest do
 
       assert resp.body["id"] == fixture_id("MANZA_FIXTURE_EXTERNAL_ACCOUNT_ID")
       assert Map.has_key?(resp.body, "default")
+    end
+
+    # Recorded after the new-payee authorize: its signature trusted the payee.
+    # Shares method + URI with get_external_account, so it loads on its own.
+    test "get_external_account after a new-payee authorize is trusted" do
+      client = CassetteReplay.replay_client(["beneficiaries/get_external_account_trusted"])
+
+      assert {:ok, resp} =
+               Manza.Beneficiaries.get_external_account(
+                 client,
+                 fixture_id("MANZA_FIXTURE_CREATED_BENEFICIARY_ID"),
+                 fixture_id("MANZA_FIXTURE_EXTERNAL_ACCOUNT_ID")
+               )
+
+      assert resp.body["id"] == fixture_id("MANZA_FIXTURE_EXTERNAL_ACCOUNT_ID")
+      assert resp.body["trusted"] == true
     end
 
     test "create_external_account" do

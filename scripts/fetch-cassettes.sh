@@ -11,7 +11,7 @@ set -euo pipefail
 
 REPO="getmanza/manza-ruby"
 # Pinned so a new manza-ruby release cannot break every SDK's CI at once; bump on purpose.
-PINNED_TAG="v1.0.0"
+PINNED_TAG="v1.3.0"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEST="$ROOT/testdata/cassettes"
 
