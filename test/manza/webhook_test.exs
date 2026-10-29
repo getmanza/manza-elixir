@@ -22,6 +22,10 @@ defmodule Manza.WebhookTest do
     test "accepts an integer timestamp" do
       assert Webhook.sign(@payload, 1_767_225_600, @secret) == @signature
     end
+
+    test "coerces a non-binary payload, like manza-ruby" do
+      assert Webhook.sign(42, @timestamp, @secret) == Webhook.sign("42", @timestamp, @secret)
+    end
   end
 
   describe "verify?/5" do
@@ -99,8 +103,24 @@ defmodule Manza.WebhookTest do
       assert verify(secret: "", signature: forged) == false
     end
 
-    test "rejects a non-binary payload" do
-      assert verify(payload: 42) == false
+    test "rejects a non-binary payload, even with a signature made over it" do
+      forged = Webhook.sign(42, @timestamp, @secret)
+      assert verify(payload: 42, signature: forged) == false
+    end
+
+    # Ruby's Integer(s, 10), which every SDK's verifier mirrors.
+    test "reads a timestamp with surrounding whitespace or digit separators like manza-ruby" do
+      for timestamp <- [" 1767225600 ", "1_767_225_600", "+1767225600"] do
+        signature = Webhook.sign(@payload, timestamp, @secret)
+        assert verify(timestamp: timestamp, signature: signature) == true, inspect(timestamp)
+      end
+
+      for timestamp <- ["", "1767225600.0", "1__767225600", "_1767225600", "0x10"] do
+        signature = Webhook.sign(@payload, timestamp, @secret)
+
+        assert verify(timestamp: timestamp, signature: signature, tolerance: nil) == false,
+               inspect(timestamp)
+      end
     end
   end
 

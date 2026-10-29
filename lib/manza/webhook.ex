@@ -30,11 +30,13 @@ defmodule Manza.Webhook do
 
   @default_tolerance 300
 
-  @doc "Lowercase hex HMAC-SHA256 of `\"<timestamp>.<payload>\"`. For tests and local tools."
-  @spec sign(String.t(), String.t() | integer(), String.t()) :: String.t()
-  def sign(payload, timestamp, secret)
-      when is_binary(payload) and (is_binary(timestamp) or is_integer(timestamp)) and
-             is_binary(secret) do
+  @doc """
+  Lowercase hex HMAC-SHA256 of `"<timestamp>.<payload>"`. For tests and local
+  tools. `payload` and `timestamp` are interpolated as they are, like
+  manza-ruby's `sign`.
+  """
+  @spec sign(String.Chars.t(), String.t() | integer(), String.t()) :: String.t()
+  def sign(payload, timestamp, secret) when is_binary(secret) do
     :hmac
     |> :crypto.mac(:sha256, secret, "#{timestamp}.#{payload}")
     |> Base.encode16(case: :lower)
@@ -113,10 +115,13 @@ defmodule Manza.Webhook do
 
   defp parse_timestamp(timestamp) when is_integer(timestamp), do: timestamp
 
+  # What Ruby's Integer(timestamp, 10) accepts: surrounding whitespace, a sign,
+  # and single underscores between digits.
   defp parse_timestamp(timestamp) when is_binary(timestamp) do
-    case Integer.parse(timestamp) do
-      {seconds, ""} -> seconds
-      _ -> nil
+    trimmed = String.trim(timestamp)
+
+    if Regex.match?(~r/\A[+-]?\d+(?:_\d+)*\z/, trimmed) do
+      trimmed |> String.replace("_", "") |> String.to_integer()
     end
   end
 
