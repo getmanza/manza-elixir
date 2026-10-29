@@ -294,6 +294,27 @@ defmodule TransferAuthorizer.PreflightTest do
     assert hd(failures(output)) =~ "1500.00 is over the limit per transfer (1000.00)"
   end
 
+  test "shows the amount at the precision it was compared", %{bypass: bypass, env: env} do
+    serve(bypass)
+    {_, output} = run(env, "1000.004")
+
+    assert hd(failures(output)) =~ "1000.004 is over the limit per transfer (1000.00)"
+  end
+
+  test "does not warn for a host that only ends in a tunnel domain's name", %{
+    bypass: bypass,
+    env: env
+  } do
+    serve(bypass, %{
+      "/api/webhook_endpoints/#{@endpoint_id}" =>
+        {200, %{@endpoint | "url" => "https://myngrok-free.app/"}}
+    })
+
+    {_, output} = run(env)
+
+    assert lines(output, "!") == []
+  end
+
   test "fails when the amount does not fit in the last 24 hours' room", %{
     bypass: bypass,
     env: env

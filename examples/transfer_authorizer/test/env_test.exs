@@ -29,6 +29,30 @@ defmodule TransferAuthorizer.EnvTest do
     assert System.get_env("TA_ENV_TEST_C") == ""
   end
 
+  test "drops only a matching pair of surrounding quotes", %{tmp_dir: dir} do
+    path = Path.join(dir, ".env")
+
+    File.write!(path, """
+    TA_ENV_TEST_A=token'
+    TA_ENV_TEST_B='single'
+    TA_ENV_TEST_C="mixed'
+    """)
+
+    Env.overload(path)
+
+    assert System.get_env("TA_ENV_TEST_A") == "token'"
+    assert System.get_env("TA_ENV_TEST_B") == "single"
+    assert System.get_env("TA_ENV_TEST_C") == "\"mixed'"
+  end
+
+  test "raises naming the file when it cannot be read", %{tmp_dir: dir} do
+    # A directory named .env reads as :eisdir.
+    path = Path.join(dir, ".env")
+    File.mkdir!(path)
+
+    assert_raise File.Error, ~r/\.env/, fn -> Env.overload(path) end
+  end
+
   test "does nothing without a .env file", %{tmp_dir: dir} do
     assert Env.overload(Path.join(dir, ".env")) == :ok
   end

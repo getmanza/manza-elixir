@@ -241,7 +241,10 @@ defmodule TransferAuthorizer.Preflight do
 
         host = URI.parse(to_string(endpoint["url"])).host || ""
 
-        if unstable = Enum.find(@unstable_tunnel_hosts, &String.ends_with?(host, &1)) do
+        unstable =
+          Enum.find(@unstable_tunnel_hosts, &(host == &1 or String.ends_with?(host, "." <> &1)))
+
+        if unstable do
           warn_step(
             ctx,
             "webhook endpoint is on #{unstable}, whose URL changes when the tunnel restarts",
@@ -368,7 +371,12 @@ defmodule TransferAuthorizer.Preflight do
   defp key_fix(_error, _key_var, _scope, _id_var),
     do: "check MANZA_BASE_URL and the network, then rerun"
 
-  defp format_amount(decimal), do: decimal |> Decimal.round(2) |> Decimal.to_string(:normal)
+  # Two places, or more when the amount has them: never hide what was compared.
+  defp format_amount(decimal) do
+    rounded = Decimal.round(decimal, 2)
+    shown = if Decimal.equal?(rounded, decimal), do: rounded, else: decimal
+    Decimal.to_string(shown, :normal)
+  end
 
   defp pass(ctx, message) do
     IO.puts(ctx.out, "✓ #{message}")

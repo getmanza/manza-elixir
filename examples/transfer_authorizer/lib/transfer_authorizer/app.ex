@@ -65,8 +65,21 @@ defmodule TransferAuthorizer.App do
 
   @impl true
   def call(conn, config) do
-    {:ok, body, conn} = read_body(conn)
+    case read_body(conn) do
+      {:ok, body, conn} ->
+        handle(conn, body, config)
 
+      {:more, _partial, conn} ->
+        Logger.warning("rejected a delivery: body over the read limit")
+        respond(conn, 413)
+
+      {:error, reason} ->
+        Logger.warning("rejected a delivery: could not read the body (#{inspect(reason)})")
+        respond(conn, 400)
+    end
+  end
+
+  defp handle(conn, body, config) do
     case Manza.Webhook.construct_event(body, conn.req_headers, config.secret) do
       {:ok, %{"event" => @event} = event} ->
         log_verified(event)
@@ -264,5 +277,8 @@ defmodule TransferAuthorizer.App do
   defp respond(conn, 200), do: conn |> put_resp_content_type("text/plain") |> send_resp(200, "ok")
 
   defp respond(conn, status),
-    do: conn |> put_resp_content_type("text/plain") |> send_resp(status, "unauthorized")
+    do:
+      conn
+      |> put_resp_content_type("text/plain")
+      |> send_resp(status, Plug.Conn.Status.reason_phrase(status))
 end

@@ -22,7 +22,7 @@ defmodule Manza.Webhook do
 
   ## Options
 
-    * `:tolerance` — seconds (an integer) the timestamp may be off from `:now`
+    * `:tolerance` — seconds (a non-negative integer) the timestamp may be off from `:now`
       (default `300`); anything else raises `ArgumentError`. `nil` skips the
       timestamp check: only to replay a captured delivery in a local tool or
       test, never on a live endpoint.
@@ -111,9 +111,9 @@ defmodule Manza.Webhook do
   defp validate_opts!(opts) do
     tolerance = Keyword.get(opts, :tolerance, @default_tolerance)
 
-    unless is_integer(tolerance) or is_nil(tolerance) do
+    unless (is_integer(tolerance) and tolerance >= 0) or is_nil(tolerance) do
       raise ArgumentError,
-            "tolerance must be an integer number of seconds or nil, got: #{inspect(tolerance)}"
+            "tolerance must be a non-negative integer number of seconds or nil, got: #{inspect(tolerance)}"
     end
 
     case Keyword.fetch(opts, :now) do

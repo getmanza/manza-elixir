@@ -67,19 +67,19 @@ mix create_transfer 250.00   # any amount within your limits
 | `challenge sent, waiting for the authorizer` | The draft is inside your envelope: the webhook is on its way to terminal 1 |
 | `sent to your approvers, not the authorizer: refused (<reason>), <words>` | The draft is outside the envelope. The `refusal_reason` and what it means: `untrusted_payee`, `unrestricted_api_key` (a new payee, and key A has no IP allowlist), `over_new_payee_limit`, `over_transfer_limit`, `over_daily_limit`, `currency_mismatch`, `suspended`, `secret_expired`. Run `mix preflight` |
 | `no transfer authorizer was enrolled` | The draft has no `authorization`: nothing was enrolled, or the feature is off |
-| `create failed for client_reference …: … (type …, request_id …)` | The API refused the draft, or did not answer. After a timeout the draft may exist anyway. If it reached the authorizer, the `mix authorizer` terminal shows it declined (not in the ledger) and a rerun is safe. Otherwise look for that `client_reference` among your approvers' drafts before rerunning, or the rerun creates a second transfer. Quote the `request_id` to support |
+| `create failed for client_reference …: … (type …, request_id …)` | The API refused the draft, or did not answer. After a timeout the draft may exist anyway, and a rerun creates a new `client_reference`, so it can become a second transfer. Rerun only once the original cannot execute: the `mix authorizer` terminal shows it declined (not in the ledger), or you found that `client_reference` among your approvers' drafts and rejected it. A challenge left pending (an `API error` line) still goes to your approvers when it expires. Quote the `request_id` to support |
 
 The authorizer (`mix authorizer`):
 
 | Line | Meaning |
 |---|---|
 | `received payment.authorization_requested (…), signature verified` | The delivery's `X-Manza-Signature` matches and its timestamp is fresh |
-| `rejected a delivery: …` | Bad signature, stale timestamp, missing header, or a body that is not a JSON object: answered 401 |
+| `rejected a delivery: …` | Bad signature, stale timestamp, missing header, or a body that is not a JSON object: answered 401. A body over the read limit is answered 413, an unreadable one 400 |
 | `ignoring …` | Any other event: answered 200, nothing done |
 | `ledger match for …` | The draft's id, amount, currency, account and payee match `ledger.json` |
 | `new payee ext:…, will be trusted on authorize` | The webhook's `payment.payee_trusted` is `false`: *Approve transfers to new payees* is on and these bank details were never trusted. The authorize trusts them |
 | `signature input differs from the webhook's: …` | The input built from the ledger is not the webhook's `signature_input`, so a signature would fail and count toward suspension. The challenge is left unanswered and goes to your approvers when it expires; compare the two strings |
-| `… retrying in Ns` | The API timed out, answered 5xx, rate-limited, or answered 409 `authorization_busy` (the payee's bank details were being edited, trusted or revoked). Authorize and decline replay idempotently; after three attempts the `API error` line follows and the challenge goes to your approvers when it expires |
+| `… retrying in Ns` | The request failed in transport (`connection`: a timeout, DNS failure or refused connection), the API answered 5xx, rate-limited, or answered 409 `authorization_busy` (the payee's bank details were being edited, trusted or revoked). Authorize and decline replay idempotently; after three attempts the `API error` line follows and the challenge goes to your approvers when it expires |
 | `signed the challenge for payment …` | HMAC-SHA256 of the ledger's signature input under the signing secret |
 | `authorized payment … (status "processing")` | Accepted: execution has started. Poll `Manza.Payments.get/2` (processing → completed / failed) or subscribe to the `transfer.executed` webhook for the outcome |
 | `declined payment …: <reason>` | The draft is not in the ledger, or differs from it, or (with `ALLOW_NEW_PAYEES=false`) it pays a new payee. The draft is deleted |

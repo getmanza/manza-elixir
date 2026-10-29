@@ -144,7 +144,7 @@ signature = Manza.TransferAuthorization.sign(signing_secret, input)
 
 authorizer = Manza.new!(api_key: System.fetch_env!("MANZA_AUTHORIZER_API_KEY"))
 {:ok, _} = Manza.Payments.authorize(authorizer, draft["id"], webhook["data"]["authorization"]["id"], signature)
-# or: Manza.Payments.decline(authorizer, draft["id"], authorization_id, "reason")
+# or: Manza.Payments.decline(authorizer, draft["id"], webhook["data"]["authorization"]["id"], "reason")
 ```
 
 A wrong signature returns `{:error, %Manza.Error{kind: :validation, type:

@@ -364,6 +364,16 @@ defmodule TransferAuthorizer.AppTest do
     end
   end
 
+  describe "with a body over the read limit" do
+    test "answers 413 and calls nothing", %{opts: opts} do
+      body = String.duplicate("a", 9_000_000)
+
+      log = capture_log(fn -> assert deliver(opts, body).status == 413 end)
+
+      assert log =~ "rejected a delivery"
+    end
+  end
+
   describe "with another event" do
     test "answers 200 and calls nothing", %{opts: opts} do
       body =

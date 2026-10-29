@@ -79,7 +79,7 @@ defmodule Manza.WebhookTest do
     end
 
     test "raises ArgumentError on a tolerance that is neither an integer nor nil" do
-      for tolerance <- ["300", :infinity, 1.5] do
+      for tolerance <- ["300", :infinity, 1.5, -1] do
         assert_raise ArgumentError, ~r/tolerance/, fn -> verify(tolerance: tolerance) end
       end
     end
