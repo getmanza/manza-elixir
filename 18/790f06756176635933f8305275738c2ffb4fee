@@ -1,0 +1,26 @@
+examples/transfer_authorizer/lib/transfer_authorizer/app.ex
+  s_65c3c5c5f93719::t_91e3dd4d907d85 1-268
+examples/transfer_authorizer/test/app_test.exs
+  s_65c3c5c5f93719::t_2059ba599c8326 1-89,91-380
+examples/transfer_authorizer/test/preflight_test.exs
+  s_65c3c5c5f93719::t_1f9e80970bd867 1-60,65,71-326
+  s_65c3c5c5f93719::t_a5213e7768981a 61-64,66-70
+examples/transfer_authorizer/lib/transfer_authorizer/preflight.ex
+  s_65c3c5c5f93719::t_6ecde8e42b4b86 1-52,55-387
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "18790f06756176635933f8305275738c2ffb4fee",
+  "prompts": {},
+  "sessions": {
+    "s_65c3c5c5f93719": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bee1964f-92c4-4310-92b4-5e82d7d3d709",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
