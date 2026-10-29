@@ -1,0 +1,25 @@
+lib/manza/webhook.ex
+  s_65c3c5c5f93719::t_3f67e5d88642c7 1-176
+lib/manza/transfer_drafts.ex
+  s_65c3c5c5f93719::t_76dcb8ba201b77 3,5-6,8,10-12,14-16,18-20,22-24
+lib/manza/transfer_authorizer.ex
+  s_65c3c5c5f93719::t_947d9b1d487803 1-28
+test/manza/webhook_test.exs
+  s_65c3c5c5f93719::t_54c6d34af3f55d 1-251
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ea8a1d876ea347bfe7d33386c1c1682ee5c78076",
+  "prompts": {},
+  "sessions": {
+    "s_65c3c5c5f93719": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bee1964f-92c4-4310-92b4-5e82d7d3d709",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}
