@@ -7,7 +7,7 @@ defmodule Manza.TransferAuthorization do
   and a one-time nonce. Build the signature input from your *own* record of
   the transfer (not the webhook's `signature_input`, which is there only to
   compare against), sign it with the authorizer endpoint's signing secret,
-  and pass the result to `Manza.TransferDrafts.authorize/4`:
+  and pass the result to `Manza.Payments.authorize/4`:
 
       input =
         Manza.TransferAuthorization.signature_input(
@@ -22,7 +22,7 @@ defmodule Manza.TransferAuthorization do
 
       signature = Manza.TransferAuthorization.sign(signing_secret, input)
 
-      Manza.TransferDrafts.authorize(client, draft["id"], authorization_id, signature)
+      Manza.Payments.authorize(client, draft["id"], authorization_id, signature)
 
   Argument errors raise `ArgumentError`: these are programming mistakes, not
   API outcomes.

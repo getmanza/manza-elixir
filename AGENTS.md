@@ -27,15 +27,19 @@ Elixir SDK for the Manza API (Hex package `manza`). This SDK **replays manza-rub
 {:ok, page} = Manza.Customers.list(client, q: "Acme")
 Manza.Page.next(page)                               # {:ok, page} | {:error, _} | nil on the last page
 
-# Transfer drafts: authorize/decline with a key other than the creator's
-{:ok, draft} = Manza.TransferDrafts.create(client, %{"account_id" => id, "amount" => "150.00", "beneficiary_id" => bid, "client_reference" => "INV-1"})
-{:error, %Manza.Error{kind: :conflict, payment_id: existing}} = Manza.TransferDrafts.create(client, same_attrs)  # 409
+# Payments (formerly transfer drafts): authorize/decline with a key other than the creator's
+{:ok, draft} = Manza.Payments.create(client, %{"account_id" => id, "amount" => "150.00", "beneficiary_id" => bid, "client_reference" => "INV-1"})
+{:error, %Manza.Error{kind: :conflict, payment_id: existing}} = Manza.Payments.create(client, same_attrs)  # 409
 
 payee = Manza.TransferAuthorization.payee_for(external_account_id: draft.body["external_account_id"])
 input = Manza.TransferAuthorization.signature_input(pid, nonce, amount, currency, account_id, payee, client_reference)
 signature = Manza.TransferAuthorization.sign(signing_secret, input)
-Manza.TransferDrafts.authorize(authorizer_client, pid, authorization_id, signature)
-Manza.TransferDrafts.decline(authorizer_client, pid, authorization_id, "reason")
+Manza.Payments.authorize(authorizer_client, pid, authorization_id, signature)
+Manza.Payments.decline(authorizer_client, pid, authorization_id, "reason")
+{:ok, authorizer} = Manza.TransferAuthorizer.get(client)   # :not_found when none is enrolled
+
+# Webhooks: verify the raw body, never re-encoded JSON
+{:ok, event} = Manza.Webhook.construct_event(raw_body, conn.req_headers, signing_secret)  # {:error, %ArgumentError{}}
 
 # Beneficiaries (create + external accounts) and payee trust requests
 Manza.Beneficiaries.create(client, attrs)
@@ -44,7 +48,7 @@ Manza.Beneficiaries.create_external_account(client, beneficiary_id, attrs)
 Manza.PayeeTrustRequests.create(client, [external_account_id])
 ```
 
-- Resource modules: `Entity`, `Accounts`, `Customers`, `Invoices`, `PaymentLinks`, `CheckoutSessions`, `WebhookEndpoints`, `Beneficiaries`, `PayeeTrustRequests`, `TransferDrafts`, plus the pure `TransferAuthorization` signer (all under `Manza.`, in `lib/manza/`)
+- Resource modules: `Entity`, `Accounts`, `Customers`, `Invoices`, `PaymentLinks`, `CheckoutSessions`, `WebhookEndpoints`, `Beneficiaries`, `PayeeTrustRequests`, `Payments`, `TransferAuthorizer`, plus the pure `TransferAuthorization` signer and `Webhook` verifier (all under `Manza.`, in `lib/manza/`). `TransferDrafts` is a soft-deprecated alias of `Payments` (`defdelegate`, `@doc deprecated:`, no compile warning) for all of 1.x
 - Tuple returns: `{:ok, %Manza.Response{}}` (body as `response.body`), list calls return `{:ok, %Manza.Page{}}`; errors are `{:error, exception}`
 - `Manza.Page`: cursor-based, hard cap of 100/page (`Manza.Page.max_per_page/0`), `Manza.Page.next/1`
 - **Error model**: one `Manza.Error` struct with a `kind`, not a class hierarchy. Discriminate on `error.kind`, never on `status` or `message`:
@@ -52,6 +56,7 @@ Manza.PayeeTrustRequests.create(client, [external_account_id])
   - `Manza.ConfigurationError` is the argument error: bad client config, `limit` over 100, a blank authorization signature (all refused before any request)
   - `Manza.ConnectionError` wraps transport failures
   - `Manza.TransferAuthorization` is the exception: it is pure and raises `ArgumentError` on programming mistakes (non-string amount, wrong payee options)
+  - `Manza.Webhook` reuses that `ArgumentError`: `construct_event/4` returns `{:error, %ArgumentError{}}`, `construct_event!/4` raises it. Its messages match manza-ruby's `Manza::Webhook` verbatim
 - Snake-case wire format: request and response bodies are string-keyed maps returned as-is. **No auto-camelCasing, no struct mapping.**
 
 ## How to work in this codebase
@@ -68,14 +73,16 @@ Manza.PayeeTrustRequests.create(client, [external_account_id])
 - **`mix format --check-formatted` and `mix test` before every commit.** `scripts/release-check` and CI run the same.
 - **Cassette contract.**
   - Cassettes come from the manza-ruby release pinned in `scripts/fetch-cassettes.sh` (`PINNED_TAG`, `cassettes-vX.Y.Z.tar.gz`; bump it on purpose), extracted to `testdata/cassettes/` (gitignored). They are recorded against `https://ma.manza.dev`.
-  - Load **one cassette per test**: `transfer_drafts/authorize` vs `authorize_same_key`, and `create` vs `create_duplicate`, share method + URI, and the first matching interaction wins.
-  - The three authorize cassettes (`authorize`, `authorize_same_key`, `authorize_bad_signature`) are loaded with `ignore_signature: true`: they match the body minus `signature` (the recorded one is scrubbed to `<SIGNATURE>`).
+  - Load **one cassette per test**: `payments/authorize` vs `authorize_same_key`, `create` vs `create_duplicate`, and `beneficiaries/get_external_account` vs `get_external_account_trusted` share method + URI, and the first matching interaction wins.
+  - The four authorize cassettes (`payments/authorize`, `authorize_same_key`, `authorize_bad_signature`, `authorize_new_payee`) are loaded with `ignore_signature: true`: they match the body minus `signature` (the recorded one is scrubbed to `<SIGNATURE>`).
   - Every other body is matched semantically: method + path + query (host ignored) + JSON bodies decoded and compared as terms (key order and whitespace never matter); non-JSON bodies compare byte-for-byte.
   - Cassette responses carry no `Content-Length`.
   - `test/support/fixture_ids.ex` must stay identical to manza-ruby's `spec/support/fixture_ids.rb` (same env var names, same placeholders). Add new ids to both.
 - **Hosts.** Default `https://ma.manza.finance`, South Africa `https://za.manza.finance`, staging and cassettes `https://ma.manza.dev`. Env vars: `MANZA_API_KEY`, `MANZA_BASE_URL`, `MANZA_API_VERSION`, read first; the legacy `ZAZU_*` names are a fallback for all of 1.x that logs a one-time deprecation warning per variable (`Manza.Client`).
 - **The error model is shared across the SDK family.** Adding an error kind (or class, elsewhere) means coordinating manza-ruby and manza-ts at minimum. The 10th is the conflict (409), here `kind: :conflict`. A break of the public API is made only on purpose, named in the CHANGELOG and released as a major.
 - **Signer.** `Manza.TransferAuthorization` must keep reproducing the two fixed vectors from manza-ruby's `spec/manza/transfer_authorization_spec.rb` (see `test/manza/transfer_authorization_test.exs`). Never sign the server's `signature_input` blindly: build it from your own record of the transfer.
+- **Webhook verifier.** `Manza.Webhook` must keep accepting the fixed vector shared by every SDK (manza-ruby's `spec/manza/webhook_spec.rb`; see `test/manza/webhook_test.exs`).
+- **Example.** `examples/transfer_authorizer/` is its own Mix project (`{:manza, path: "../.."}` plus `plug`, `bandit`, `decimal`, and `bypass` for its tests). Its dependencies never go into the library's `mix.exs`, and the Hex package never ships `examples/` (the default `package` files exclude it; check with `mix hex.build`). CI runs its `mix test`; the root `mix format` covers its `lib` and `test`. Its tests stub the API with Bypass, like manza-ruby's example specs with WebMock: the cassette contract covers the SDK, not the example.
 - **Release.** `bin/release` is byte-identical across the SDK repos and never edited in place (nor the release workflow's release-kit parts). Cut releases with it, never by hand-tagging: `release.yml` fails the publish when the tag differs from `@version`. Never run `mix hex.publish` locally; verify through CI. Repo-specific logic lives in `scripts/version` (reads/writes `@version` in `mix.exs`) and `scripts/release-check` (fetch cassettes, deps, format, test). `release.yml` gates on tag == `mix.exs` version.
 - **Hex has no OIDC trusted publishing.** `release.yml` publishes with the `HEX_API_KEY` secret on the `hex` GitHub environment (add required reviewers there for a human gate). Generate the key on https://hex.pm/dashboard/keys with API write permission (Hex 2.5 removed `mix hex.user key generate`). The `hex` environment and the secret must live on `getmanza/manza-elixir`, and the key's Hex account must own the package `manza`.
 - **Names.** Repo `getmanza/manza-elixir`, Hex package `manza`, app `:manza`, modules `Manza.*`. The old `zazu` Hex package is retired separately; never reintroduce `Zazu`/`ZAZU_` outside the env fallback and the CHANGELOG.
@@ -155,7 +162,7 @@ Commands are the ones in `.github/workflows/ci.yml` (CI sets `MIX_ENV=test`):
 ```bash
 # One-time setup
 export MIX_ENV=test
-scripts/fetch-cassettes.sh          # the pinned manza-ruby tarball (v1.0.0) -> testdata/cassettes/
+scripts/fetch-cassettes.sh          # the pinned manza-ruby tarball (v1.3.0) -> testdata/cassettes/
 scripts/fetch-cassettes.sh v1.0.1   # or another tag
 mix deps.get
 
@@ -164,6 +171,7 @@ mix test test/manza/resources_test.exs   # while iterating
 mix format                              # auto-format
 mix format --check-formatted            # what CI gates on
 mix test                                # full suite
+(cd examples/transfer_authorizer && mix deps.get && mix test)   # the example, as CI runs it
 
 # Release (after PR merge, from a clean, up-to-date main)
 bin/release list        # last releases + what patch/minor/major would give
@@ -175,7 +183,7 @@ bin/release minor       # or patch (default), major, an explicit 0.4.0; --force 
 
 ## Workflow
 
-- **Verify:** `MIX_ENV=test mix format --check-formatted` · `MIX_ENV=test mix test` (no Credo, no Dialyzer; `scripts/fetch-cassettes.sh` first if `testdata/cassettes/` is missing or stale)
+- **Verify:** `MIX_ENV=test mix format --check-formatted` · `MIX_ENV=test mix test` · in `examples/transfer_authorizer/`: `MIX_ENV=test mix test` (no Credo, no Dialyzer; `scripts/fetch-cassettes.sh` first if `testdata/cassettes/` is missing or stale)
 - **Specs:** fast loop `MIX_ENV=test mix test test/manza/<file>_test.exs`; full suite `MIX_ENV=test mix test` (replay: no network); two worktrees at once: yes, each fetches its own cassettes (`testdata/cassettes/` is gitignored)
 - **CI:** required none; job `test` (`ci.yml`, Elixir 1.18 / OTP 27, no matrix), check `cubic · AI code reviewer`; full suite on the PR; failure report none
 - **Review bot:** cubic; push back, citing this file, on mocks instead of cassettes, camelCased or atomized wire keys, hand-rolled Req calls, speculative abstractions

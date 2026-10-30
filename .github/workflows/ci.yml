@@ -34,7 +34,9 @@ jobs:
           path: |
             deps
             _build
-          key: mix-${{ runner.os }}-${{ hashFiles('mix.lock') }}
+            examples/transfer_authorizer/deps
+            examples/transfer_authorizer/_build
+          key: mix-${{ runner.os }}-${{ hashFiles('mix.lock', 'examples/transfer_authorizer/mix.lock') }}
           restore-keys: mix-${{ runner.os }}-
 
       - name: Install dependencies
@@ -44,4 +46,14 @@ jobs:
         run: mix format --check-formatted
 
       - name: Run tests
+        run: mix test
+
+      # The example is its own Mix project ({:manza, path: "../.."}), so its
+      # plug, bandit and decimal never reach the published package.
+      - name: Example dependencies
+        working-directory: examples/transfer_authorizer
+        run: mix deps.get
+
+      - name: Example tests
+        working-directory: examples/transfer_authorizer
         run: mix test
