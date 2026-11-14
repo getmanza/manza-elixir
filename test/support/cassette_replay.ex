@@ -10,9 +10,11 @@ defmodule Manza.Test.CassetteReplay do
   whitespace differences between Ruby's and Elixir's encoders never matter).
 
   Load ONE cassette per test when two cassettes share method + URI
-  (`payments/authorize` vs `authorize_same_key`, `create` vs
-  `create_duplicate`, `beneficiaries/get_external_account` vs
-  `get_external_account_trusted`): the first matching interaction wins.
+  (`payments/authorize` vs `authorize_same_key`, `payments/create` vs
+  `create_duplicate` vs `create_invalid_transfer_method`, `invoices/create`
+  vs `create_without_account` vs `create_invalid_generate_payment_link`,
+  `beneficiaries/get_external_account` vs `get_external_account_trusted`):
+  the first matching interaction wins.
 
   The authorize cassettes are loaded with `ignore_signature: true`: their
   recorded `signature` is scrubbed to `<SIGNATURE>` (the real one is an HMAC

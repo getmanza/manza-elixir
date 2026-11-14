@@ -46,7 +46,7 @@ defmodule Manza.Invoices do
   enabled for the entity. A boolean, `nil` (no link) or the strings `"true"`,
   `"false"`, `"1"` and `"0"` are taken; any other value returns a 400
   `:validation` error and nothing is created. It replaces the removed
-  `create_payment_link/3`.
+  `create_payment_link` function.
 
   `tax_rate` must be the issuer's rate or 0, otherwise 422. The market-gated
   `delivery_date` key is absent outside Morocco. The response carries

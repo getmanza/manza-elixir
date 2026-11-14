@@ -328,7 +328,7 @@ defmodule TransferAuthorizer.PreflightTest do
     assert hd(failures(output)) =~ "24 hours' room (5.00 left)"
   end
 
-  test "warns that a new payee needs the toggle, which the API does not show", %{
+  test "warns that a new payee needs the toggle, which trust_new_payees shows", %{
     bypass: bypass,
     env: env
   } do
@@ -341,7 +341,12 @@ defmodule TransferAuthorizer.PreflightTest do
 
     assert ok
 
-    for part <- ["not trusted yet", "Approve transfers to new payees", "IP allowlist"],
+    for part <- [
+          "not trusted yet",
+          "Approve transfers to new payees",
+          "trust_new_payees",
+          "IP allowlist"
+        ],
         do: assert(hd(lines(output, "!")) =~ part)
   end
 

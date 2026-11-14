@@ -231,6 +231,20 @@ defmodule Manza.ClientTest do
       assert {error.limit_kind, error.limit_current, error.limit_max} == {"invoices", 10, 10}
     end
 
+    test "plan_limit_reached on another status keeps that status's kind" do
+      error =
+        error_for(500, %{
+          "type" => "plan_limit_reached",
+          "message" => "Plan limit reached for invoices: 10 of 10",
+          "kind" => "invoices",
+          "current" => 10,
+          "max" => 10
+        })
+
+      assert error.kind == :server
+      assert {error.limit_kind, error.limit_current, error.limit_max} == {nil, nil, nil}
+    end
+
     test "any other 422 stays :validation without limit fields" do
       error =
         error_for(422, %{

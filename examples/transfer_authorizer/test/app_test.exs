@@ -353,6 +353,7 @@ defmodule TransferAuthorizer.AppTest do
           {200, %{"id" => @authorization_id, "status" => "declined"}}
         ])
 
+      # No authorize expectation on Bypass: an authorize call fails the test.
       capture_log(fn -> assert deliver(opts, Jason.encode!(@payload)).status == 200 end)
 
       assert [{_, %{"authorization_id" => @authorization_id, "reason" => reason}}] = calls(agent)

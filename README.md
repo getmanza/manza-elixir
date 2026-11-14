@@ -230,5 +230,5 @@ mix test
 | PHP | [getmanza/manza-php](https://github.com/getmanza/manza-php) | `composer require manza/manza-php` |
 | Rust | [getmanza/manza-rust](https://github.com/getmanza/manza-rust) | `cargo add manza` |
 | Crystal | [getmanza/manza-crystal](https://github.com/getmanza/manza-crystal) | shard `manza` (`github: getmanza/manza-crystal`) |
-| Elixir | [getmanza/manza-elixir](https://github.com/getmanza/manza-elixir) (this repo) | `{:manza, "~> 1.0"}` |
+| Elixir | [getmanza/manza-elixir](https://github.com/getmanza/manza-elixir) (this repo) | `{:manza, "~> 2.0"}` |
 | CLI | [getmanza/cli](https://github.com/getmanza/cli) | `npm install -g @getzazu/cli` or `brew install getmanza/tap/zazu` |
