@@ -10,7 +10,7 @@ name: Release
 # Workload identities: owner `getmanza`, repository `manza-elixir`, workflow
 # `release.yml`, environment `hex`. Needs Hex >= 2.6 and OTP 27 in the job.
 # A release published this way is staged until a package owner approves it
-# on hex.pm (Settings → Staged publishing).
+# on hex.pm (Settings → Staged publishing); the job waits up to 2 hours.
 
 on:
   push:
@@ -46,6 +46,8 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    # `--wait` holds the job until a package owner approves the staged release.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v6
         with:
@@ -76,7 +78,9 @@ jobs:
           if [[ "$STATUS" == "200" ]]; then
             echo "manza $VERSION is already on Hex; skipping publish."
           elif [[ "$STATUS" == "404" ]]; then
-            mix hex.publish --yes
+            # A workload-identity release is staged; --wait returns once an owner
+            # approves it on hex.pm, so github-release never runs ahead of Hex.
+            mix hex.publish --yes --wait
           else
             echo "Unable to determine whether manza $VERSION is on Hex (HTTP $STATUS)." >&2
             exit 1
