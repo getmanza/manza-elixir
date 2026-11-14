@@ -1,7 +1,8 @@
 defmodule TransferAuthorizer.AppTest do
   # Drives the example's authorizer with a signed copy of the documented
   # `payment.authorization_requested` payload (the same one manza-ruby's
-  # spec/examples/transfer_authorizer_spec.rb uses). The API is a Bypass
+  # spec/examples/transfer_authorizer_spec.rb uses, with v2's
+  # `signature_input_v2` and `payment.transfer_method`). The API is a Bypass
   # server: no cassette, no network.
   use ExUnit.Case, async: true
 
@@ -15,9 +16,9 @@ defmodule TransferAuthorizer.AppTest do
   @draft_id "01958e51-7c5a-7000-8000-000000000012"
   @authorization_id "01958e51-7c5a-7000-8000-000000000011"
   @payee "ext:01958e51-7c5a-7000-8000-000000000014"
-  @signature_input "manza.transfer-authorization.v1|01958e51-7c5a-7000-8000-000000000012|" <>
-                     "9f86d081884c7d659a2feaa0c55ad015|2500.0|ZAR|01958e51-7c5a-7000-8000-000000000013|" <>
-                     "ext:01958e51-7c5a-7000-8000-000000000014|po_8812"
+  @signature_input_v2 "manza.transfer-authorization.v2|01958e51-7c5a-7000-8000-000000000012|" <>
+                        "9f86d081884c7d659a2feaa0c55ad015|2500.0|ZAR|01958e51-7c5a-7000-8000-000000000013|" <>
+                        "ext:01958e51-7c5a-7000-8000-000000000014|po_8812|eft"
   @payload %{
     "event" => "payment.authorization_requested",
     "event_id" => "01958e51-7c5a-7000-8000-000000000010",
@@ -40,12 +41,17 @@ defmodule TransferAuthorizer.AppTest do
         "destination_account_id" => nil,
         "payment_reference" => "INV-2026-001",
         "client_reference" => "po_8812",
+        "transfer_method" => "eft",
         "payee_trusted" => false
       },
       "signature_input" =>
         "manza.transfer-authorization.v1|01958e51-7c5a-7000-8000-000000000012|" <>
           "9f86d081884c7d659a2feaa0c55ad015|2500.0|ZAR|01958e51-7c5a-7000-8000-000000000013|" <>
-          "ext:01958e51-7c5a-7000-8000-000000000014|po_8812"
+          "ext:01958e51-7c5a-7000-8000-000000000014|po_8812",
+      "signature_input_v2" =>
+        "manza.transfer-authorization.v2|01958e51-7c5a-7000-8000-000000000012|" <>
+          "9f86d081884c7d659a2feaa0c55ad015|2500.0|ZAR|01958e51-7c5a-7000-8000-000000000013|" <>
+          "ext:01958e51-7c5a-7000-8000-000000000014|po_8812|eft"
     }
   }
   @entry %{
@@ -53,7 +59,8 @@ defmodule TransferAuthorizer.AppTest do
     "amount" => "2500.0",
     "currency_code" => "ZAR",
     "account_id" => "01958e51-7c5a-7000-8000-000000000013",
-    "payee" => "ext:01958e51-7c5a-7000-8000-000000000014"
+    "payee" => "ext:01958e51-7c5a-7000-8000-000000000014",
+    "transfer_method" => "eft"
   }
 
   @moduletag :tmp_dir
@@ -117,7 +124,7 @@ defmodule TransferAuthorizer.AppTest do
   defp calls(agent), do: agent |> Agent.get(& &1) |> elem(1)
 
   defp expected_signature do
-    Manza.TransferAuthorization.sign(@secret, @signature_input)
+    Manza.TransferAuthorization.sign(@secret, @signature_input_v2)
   end
 
   describe "with a matching ledger entry" do
@@ -170,15 +177,30 @@ defmodule TransferAuthorizer.AppTest do
       assert log =~ "req_123"
     end
 
-    test "logs both signature inputs and does not authorize when the webhook's differs", %{
-      opts: opts
-    } do
-      body = Jason.encode!(payload([{["data", "signature_input"], "something-else"}]))
+    test "builds the webhook's v2 signature input from the ledger" do
+      input =
+        Manza.TransferAuthorization.signature_input(
+          @entry["payment_id"],
+          "9f86d081884c7d659a2feaa0c55ad015",
+          @entry["amount"],
+          @entry["currency_code"],
+          @entry["account_id"],
+          @entry["payee"],
+          "po_8812",
+          @entry["transfer_method"]
+        )
+
+      assert input == @payload["data"]["signature_input_v2"]
+    end
+
+    test "logs both signature inputs and does not authorize when the webhook's v2 input differs",
+         %{opts: opts} do
+      body = Jason.encode!(payload([{["data", "signature_input_v2"], "something-else"}]))
 
       log = capture_log(fn -> deliver(opts, body) end)
 
       assert log =~ "something-else"
-      assert log =~ @signature_input
+      assert log =~ @signature_input_v2
     end
 
     test "retries authorize after a transient failure", %{bypass: bypass, opts: opts} do
@@ -315,6 +337,27 @@ defmodule TransferAuthorizer.AppTest do
       capture_log(fn -> deliver(opts, body) end)
 
       assert length(calls(agent)) == 1
+    end
+  end
+
+  describe "with a transfer_method that differs from the ledger's" do
+    test "declines with a reason naming transfer_method", %{
+      bypass: bypass,
+      ledger: ledger,
+      opts: opts
+    } do
+      Ledger.record(ledger, "po_8812", Map.put(@entry, "transfer_method", "rtc"))
+
+      agent =
+        expect_calls(bypass, "/api/payments/#{@draft_id}/decline", [
+          {200, %{"id" => @authorization_id, "status" => "declined"}}
+        ])
+
+      # No authorize expectation on Bypass: an authorize call fails the test.
+      capture_log(fn -> assert deliver(opts, Jason.encode!(@payload)).status == 200 end)
+
+      assert [{_, %{"authorization_id" => @authorization_id, "reason" => reason}}] = calls(agent)
+      assert reason =~ "transfer_method"
     end
   end
 

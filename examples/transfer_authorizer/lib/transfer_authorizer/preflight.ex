@@ -324,8 +324,9 @@ defmodule TransferAuthorizer.Preflight do
               ctx,
               "payee #{account["id"]} is not trusted yet",
               "it qualifies only with \"Approve transfers to new payees\" on in Settings → Developer → " <>
-                "Transfer approval (not visible through the API), key A bound to an IP allowlist, and the " <>
-                "amount within the limit per transfer to a new payee, and only if its bank details were " <>
+                "Transfer approval (`trust_new_payees` on Manza.TransferAuthorizer.get/1), key A bound to " <>
+                "an IP allowlist, and the amount within the limit per transfer to a new payee, and only " <>
+                "if its bank details were " <>
                 "never trusted (revoked or edited details always go to your approvers); otherwise have an " <>
                 "approver trust it"
             )

@@ -1,6 +1,7 @@
 defmodule Manza.TransferAuthorizationTest do
-  # Fixed test vector, shared by every SDK in the family (same as manza-ruby's
-  # spec/manza/transfer_authorization_spec.rb). The digests were computed with:
+  # Fixed v2 test vectors, shared by every SDK in the family (same as
+  # manza-ruby's spec/manza/transfer_authorization_spec.rb). The digests were
+  # computed with:
   #
   #   printf '%s' '<input>' | openssl dgst -sha256 -hmac 'whsec_test_vector_secret'
 
@@ -13,10 +14,11 @@ defmodule Manza.TransferAuthorizationTest do
   @nonce "n0nce-0123456789abcdef"
   @account_id "0199a1b2-0000-7000-8000-000000000002"
 
-  test "external-account payee with a client_reference" do
-    payee =
+  defp ext_payee,
+    do:
       TransferAuthorization.payee_for(external_account_id: "0199a1b2-0000-7000-8000-000000000003")
 
+  test "signs version v2" do
     input =
       TransferAuthorization.signature_input(
         @payment_id,
@@ -24,19 +26,55 @@ defmodule Manza.TransferAuthorizationTest do
         "2500.0",
         "MAD",
         @account_id,
-        payee,
-        "po_1"
+        ext_payee(),
+        "po_1",
+        "eft"
+      )
+
+    assert String.starts_with?(input, "manza.transfer-authorization.v2|")
+  end
+
+  test "external-account payee with a client_reference and a transfer_method" do
+    input =
+      TransferAuthorization.signature_input(
+        @payment_id,
+        @nonce,
+        "2500.0",
+        "MAD",
+        @account_id,
+        ext_payee(),
+        "po_1",
+        "eft"
       )
 
     assert input ==
-             "manza.transfer-authorization.v1|0199a1b2-0000-7000-8000-000000000001|n0nce-0123456789abcdef|" <>
-               "2500.0|MAD|0199a1b2-0000-7000-8000-000000000002|ext:0199a1b2-0000-7000-8000-000000000003|po_1"
+             "manza.transfer-authorization.v2|0199a1b2-0000-7000-8000-000000000001|n0nce-0123456789abcdef|" <>
+               "2500.0|MAD|0199a1b2-0000-7000-8000-000000000002|ext:0199a1b2-0000-7000-8000-000000000003|po_1|eft"
 
     assert TransferAuthorization.sign(@secret, input) ==
-             "6e8eaec0f89a4eb3b22df1133b3d6dfebfa8505c34c58ed0ff192516e4223078"
+             "904da7d0b73b2c919ffa1ae64d262ce5825ee4d2c8420fd70a3d257353e6c43a"
   end
 
-  test "own-account payee without a client_reference ends with an empty segment" do
+  test "a nil transfer_method ends with an empty segment" do
+    input =
+      TransferAuthorization.signature_input(
+        @payment_id,
+        @nonce,
+        "2500.0",
+        "MAD",
+        @account_id,
+        ext_payee(),
+        "po_1",
+        nil
+      )
+
+    assert String.ends_with?(input, "|ext:0199a1b2-0000-7000-8000-000000000003|po_1|")
+
+    assert TransferAuthorization.sign(@secret, input) ==
+             "029dd12924a846d7af2f4aecb61e4f4f9bd64d37315230864fb03917adc29edf"
+  end
+
+  test "own-account payee without a client_reference or a transfer_method ends with two empty segments" do
     payee =
       TransferAuthorization.payee_for(
         destination_account_id: "0199a1b2-0000-7000-8000-000000000004"
@@ -49,13 +87,15 @@ defmodule Manza.TransferAuthorizationTest do
         "2500.0",
         "MAD",
         @account_id,
-        payee
+        payee,
+        nil,
+        nil
       )
 
-    assert String.ends_with?(input, "|own:0199a1b2-0000-7000-8000-000000000004|")
+    assert String.ends_with?(input, "|own:0199a1b2-0000-7000-8000-000000000004||")
 
     assert TransferAuthorization.sign(@secret, input) ==
-             "af9440b1de1bebb51f381ce43e3d0d27b6a4ccb99dcd548c0b5435ff4fdd1895"
+             "a21ccf43b94f23d7a595a36bd788c27c7adbc5686a5ad4427b22d9957568c9fb"
   end
 
   test "signature_input refuses a non-string amount" do
@@ -67,9 +107,23 @@ defmodule Manza.TransferAuthorizationTest do
         2500,
         "MAD",
         @account_id,
-        "ext:x"
+        "ext:x",
+        nil,
+        nil
       ])
     end
+  end
+
+  # A v1 call (no transfer_method) fails here, not as a failed signature
+  # attempt at the API, where five of them fail the challenge. A 1.x
+  # seven-argument call must not become a v2 input that signs its
+  # client_reference as the transfer_method.
+  test "signature_input requires transfer_method and client_reference, nil included" do
+    Code.ensure_loaded!(TransferAuthorization)
+
+    assert function_exported?(TransferAuthorization, :signature_input, 8)
+    refute function_exported?(TransferAuthorization, :signature_input, 7)
+    refute function_exported?(TransferAuthorization, :signature_input, 6)
   end
 
   test "payee_for refuses both ids at once" do

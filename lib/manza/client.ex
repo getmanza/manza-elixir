@@ -187,7 +187,7 @@ defmodule Manza.Client do
     end
   end
 
-  # Reads MANZA_<name>, falling back to the legacy ZAZU_<name> (all of 1.x)
+  # Reads MANZA_<name>, falling back to the legacy ZAZU_<name> (until a later major)
   # with a deprecation warning, logged once per variable.
   defp env(name) do
     case get_env("MANZA_" <> name) do
@@ -214,7 +214,7 @@ defmodule Manza.Client do
       :persistent_term.put(key, true)
 
       Logger.warning(
-        "manza: #{legacy} is deprecated, use #{current} (the fallback is removed in 2.0)"
+        "manza: #{legacy} is deprecated, use #{current} (the fallback is removed in a later major release)"
       )
     end
   end

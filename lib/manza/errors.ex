@@ -8,7 +8,14 @@ defmodule Manza.Error do
     * `:authentication` — 401
     * `:forbidden` — 403
     * `:not_found` — 404
-    * `:validation` — 400 (malformed request) or 422
+    * `:validation` — 400 (malformed request) or any other 422
+    * `:plan_limit_reached` — 422 whose `type` is `"plan_limit_reached"`
+      (since 2.0; the other SDKs' `PlanLimitReachedError`, a validation
+      subclass): the entity's plan caps this kind of record and the cap is
+      reached. `:limit_kind` names what is capped (e.g. `"invoices"`, the
+      API's `error.kind`), `:limit_current` the count the entity holds and
+      `:limit_max` the cap. Retrying does not help until the plan changes or
+      the period rolls over
     * `:conflict` — 409 (`:payment_id` names the existing transfer draft on a
       duplicate `client_reference`)
     * `:rate_limit` — 429 (`:retry_after` carries the `Retry-After` seconds)
@@ -25,6 +32,9 @@ defmodule Manza.Error do
     :request_id,
     :retry_after,
     :payment_id,
+    :limit_kind,
+    :limit_current,
+    :limit_max,
     body: %{}
   ]
 
@@ -33,6 +43,7 @@ defmodule Manza.Error do
           | :forbidden
           | :not_found
           | :validation
+          | :plan_limit_reached
           | :conflict
           | :rate_limit
           | :server
@@ -47,6 +58,9 @@ defmodule Manza.Error do
           request_id: String.t() | nil,
           retry_after: non_neg_integer() | nil,
           payment_id: String.t() | nil,
+          limit_kind: String.t() | nil,
+          limit_current: integer() | nil,
+          limit_max: integer() | nil,
           body: map()
         }
 
@@ -64,16 +78,23 @@ defmodule Manza.Error do
   def from_response(status, headers, body) do
     payload = if is_map(body), do: Map.get(body, "error"), else: nil
     payload = if is_map(payload), do: payload, else: %{}
+    type = string_or_nil(payload["type"])
+    plan_limit? = status == 422 and type == "plan_limit_reached"
 
     %__MODULE__{
       status: status,
-      kind: kind_for(status),
-      type: string_or_nil(payload["type"]),
-      message: string_or_nil(payload["message"]) || default_message(status),
+      kind: if(plan_limit?, do: :plan_limit_reached, else: kind_for(status)),
+      type: type,
+      message:
+        string_or_nil(payload["message"]) ||
+          if(plan_limit?, do: "Plan limit reached", else: default_message(status)),
       param: string_or_nil(payload["param"]),
       request_id: header_value(headers, "x-request-id"),
       retry_after: retry_after(status, headers),
       payment_id: string_or_nil(payload["payment_id"]),
+      limit_kind: if(plan_limit?, do: string_or_nil(payload["kind"])),
+      limit_current: if(plan_limit?, do: integer_or_nil(payload["current"])),
+      limit_max: if(plan_limit?, do: integer_or_nil(payload["max"])),
       body: if(is_map(body), do: body, else: %{})
     }
   end
@@ -109,6 +130,9 @@ defmodule Manza.Error do
 
   defp string_or_nil(value) when is_binary(value) and value != "", do: value
   defp string_or_nil(_value), do: nil
+
+  defp integer_or_nil(value) when is_integer(value), do: value
+  defp integer_or_nil(_value), do: nil
 
   @reason_phrases %{
     400 => "Bad Request",
