@@ -1,13 +1,16 @@
 name: Release
 
-# Tag-driven release. Hex.pm has no OIDC trusted publishing, so this is the
-# closest equivalent: a short-lived-as-possible HEX_API_KEY repository secret,
-# gated behind the `hex` GitHub environment (add required reviewers there for
-# a human approval step), plus a GitHub release.
+# Tag-driven release. The publish job uses Hex trusted publishing (a Hex
+# workload identity): `mix hex.publish` asks GitHub for an OIDC token
+# (audience `hexpm`) and trades it for a 15-minute token that can publish
+# only `manza`. No HEX_API_KEY exists anywhere; a configured key would take
+# precedence over the workload identity, so none is set.
 #
-# One-time setup: generate a publish key (`mix hex.user key generate
-# --permission api:write`) and store it as the HEX_API_KEY secret on the
-# `hex` environment.
+# One-time setup on hex.pm (package owner with 2FA): manza → Settings →
+# Workload identities: owner `getmanza`, repository `manza-elixir`, workflow
+# `release.yml`, environment `hex`. Needs Hex >= 2.6 and OTP 27 in the job.
+# A release published this way is staged until a package owner approves it
+# on hex.pm (Settings → Staged publishing).
 
 on:
   push:
@@ -38,7 +41,11 @@ jobs:
   publish:
     needs: test
     runs-on: ubuntu-26.04
+    # The workload identity on hex.pm is bound to this environment name.
     environment: hex
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -47,6 +54,8 @@ jobs:
         with:
           otp-version: "27"
           elixir-version: "1.18"
+      # Workload identity needs Hex >= 2.6 (staged publishing 2.7).
+      - run: mix local.hex --force
       - run: mix deps.get
       - name: Verify tag matches package version
         # Ask Mix itself — mix.exs declares the version via a @version module
@@ -61,8 +70,6 @@ jobs:
       - name: Publish to Hex
         # Idempotent: publishing a drafted GitHub release re-fires the tag push,
         # and Hex rejects re-publishing an existing version without --replace.
-        env:
-          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
         run: |
           VERSION="${GITHUB_REF#refs/tags/v}"
           STATUS=$(curl -s --retry 3 -o /dev/null -w '%{http_code}' "https://hex.pm/api/packages/manza/releases/$VERSION")
