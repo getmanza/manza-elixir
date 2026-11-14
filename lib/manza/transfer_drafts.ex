@@ -1,6 +1,6 @@
 defmodule Manza.TransferDrafts do
   @moduledoc """
-  Deprecated alias of `Manza.Payments`, kept for all of 1.x.
+  Deprecated alias of `Manza.Payments`, kept until a later major release.
 
   Every function delegates to `Manza.Payments`, so it calls `/api/payments`.
   The deprecation is soft: it shows in the docs and emits no compile warning.

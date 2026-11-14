@@ -54,14 +54,121 @@ defmodule Manza.ResourcesTest do
     assert is_binary(resp.body["id"])
   end
 
-  test "invoices" do
-    client = CassetteReplay.replay_client(["invoices/list", "invoices/get"])
+  describe "invoices" do
+    test "list and get" do
+      client = CassetteReplay.replay_client(["invoices/list", "invoices/get"])
 
-    assert {:ok, page} = Manza.Invoices.list(client)
-    assert page.data != []
+      assert {:ok, page} = Manza.Invoices.list(client)
+      assert page.data != []
 
-    invoice_id = fixture_id("MANZA_FIXTURE_INVOICE_ID")
-    assert {:ok, _resp} = Manza.Invoices.get(client, invoice_id)
+      invoice_id = fixture_id("MANZA_FIXTURE_INVOICE_ID")
+      assert {:ok, _resp} = Manza.Invoices.get(client, invoice_id)
+    end
+
+    # Fixed dates keep the recorded body stable. Each create cassette loads on
+    # its own: they share method + URI.
+    test "create is paid into the account and asks for a payment link" do
+      client = CassetteReplay.replay_client(["invoices/create"])
+
+      assert {:ok, resp} =
+               Manza.Invoices.create(client, %{
+                 "customer_id" => fixture_id("MANZA_FIXTURE_CUSTOMER_ID"),
+                 "account_id" => fixture_id("MANZA_FIXTURE_ACCOUNT_ID"),
+                 "currency_code" => "MAD",
+                 "issue_date" => "2026-11-14",
+                 "due_date" => "2026-12-14",
+                 "generate_payment_link" => true,
+                 "items" => [
+                   %{
+                     "description" => "SDK fixture line",
+                     "quantity" => 1,
+                     "unit_price" => "100.00"
+                   }
+                 ]
+               })
+
+      assert resp.status == 201
+      assert resp.body["generate_payment_link"] == true
+      assert resp.body["account"]["id"] == fixture_id("MANZA_FIXTURE_ACCOUNT_ID")
+    end
+
+    # An invoice is paid into one of the entity's accounts: a create without
+    # one is refused as not approvable (`type` "state_error"). An account_id
+    # that is not the entity's is refused with `param` "account_id".
+    test "create without an account_id is a validation error" do
+      client = CassetteReplay.replay_client(["invoices/create_without_account"])
+
+      assert {:error, %Manza.Error{} = error} =
+               Manza.Invoices.create(client, %{
+                 "customer_id" => fixture_id("MANZA_FIXTURE_CUSTOMER_ID"),
+                 "currency_code" => "MAD",
+                 "issue_date" => "2026-05-03",
+                 "due_date" => "2026-06-03",
+                 "items" => [
+                   %{
+                     "description" => "SDK fixture line",
+                     "quantity" => 1,
+                     "unit_price" => "100.00"
+                   }
+                 ]
+               })
+
+      assert error.kind == :validation
+      assert error.status == 422
+      assert error.type == "state_error"
+      # The account refusal, not a date one (also state_error).
+      assert error.param == nil
+      assert error.message =~ ~r/compte bancaire|bank account/i
+    end
+
+    # Only a boolean (or "true"/"false"/"1"/"0") is taken: any other text is
+    # refused before anything is created.
+    test "create with a non-boolean generate_payment_link is a 400 validation error" do
+      client = CassetteReplay.replay_client(["invoices/create_invalid_generate_payment_link"])
+
+      assert {:error, %Manza.Error{} = error} =
+               Manza.Invoices.create(client, %{
+                 "customer_id" => fixture_id("MANZA_FIXTURE_CUSTOMER_ID"),
+                 "account_id" => fixture_id("MANZA_FIXTURE_ACCOUNT_ID"),
+                 "currency_code" => "MAD",
+                 "issue_date" => "2026-05-03",
+                 "due_date" => "2026-06-03",
+                 "generate_payment_link" => "yes please",
+                 "items" => [
+                   %{
+                     "description" => "SDK fixture line",
+                     "quantity" => 1,
+                     "unit_price" => "100.00"
+                   }
+                 ]
+               })
+
+      assert error.kind == :validation
+      assert error.status == 400
+      assert error.message =~ "generate_payment_link"
+    end
+
+    test "update takes account_id and generate_payment_link" do
+      client = CassetteReplay.replay_client(["invoices/update"])
+
+      assert {:ok, resp} =
+               Manza.Invoices.update(client, fixture_id("MANZA_FIXTURE_INVOICE_ID"), %{
+                 "account_id" => fixture_id("MANZA_FIXTURE_ACCOUNT_ID"),
+                 "notes" => "updated by SDK fixture spec",
+                 "generate_payment_link" => true
+               })
+
+      assert resp.status == 200
+      assert resp.body["generate_payment_link"] == true
+      assert resp.body["account"]["id"] == fixture_id("MANZA_FIXTURE_ACCOUNT_ID")
+    end
+
+    test "has no create_payment_link: generate_payment_link on create or update replaced it" do
+      Code.ensure_loaded!(Manza.Invoices)
+
+      assert function_exported?(Manza.Invoices, :update, 3)
+      refute function_exported?(Manza.Invoices, :create_payment_link, 3)
+    end
   end
 
   test "payment links" do
@@ -112,7 +219,7 @@ defmodule Manza.ResourcesTest do
   end
 
   describe "payments" do
-    test "create carries the client_reference and sends the challenge" do
+    test "create carries the client_reference and the transfer_method and sends the challenge" do
       client = CassetteReplay.replay_client(["payments/create"])
 
       assert {:ok, resp} =
@@ -122,12 +229,14 @@ defmodule Manza.ResourcesTest do
                  "amount" => "10.00",
                  "payment_reference" => "SDK fixture",
                  "internal_notes" => "[zazu-ruby-fixture] create spec - do not approve",
-                 "client_reference" => fixture_id("MANZA_FIXTURE_CLIENT_REFERENCE")
+                 "client_reference" => fixture_id("MANZA_FIXTURE_CLIENT_REFERENCE"),
+                 "transfer_method" => "standard"
                })
 
       assert resp.status == 201
       assert resp.body["status"] == "requested"
       assert resp.body["client_reference"] == fixture_id("MANZA_FIXTURE_CLIENT_REFERENCE")
+      assert resp.body["transfer_method"] == "standard"
       # Inside the envelope: the challenge went to the authorizer.
       assert resp.body["authorization"]["status"] == "pending"
       assert resp.body["transfer"] == nil
@@ -148,6 +257,22 @@ defmodule Manza.ResourcesTest do
       assert error.kind == :conflict
       assert error.type == "duplicate_client_reference"
       assert error.payment_id == fixture_id("MANZA_FIXTURE_AUTHORIZABLE_DRAFT_ID")
+    end
+
+    test "create with a transfer_method the market does not offer is a validation error on transfer_method" do
+      client = CassetteReplay.replay_client(["payments/create_invalid_transfer_method"])
+
+      assert {:error, %Manza.Error{} = error} =
+               Manza.Payments.create(client, %{
+                 "account_id" => fixture_id("MANZA_FIXTURE_ACCOUNT_ID"),
+                 "beneficiary_id" => fixture_id("MANZA_FIXTURE_BENEFICIARY_ID"),
+                 "amount" => "10.00",
+                 "transfer_method" => "carrier_pigeon"
+               })
+
+      assert error.kind == :validation
+      assert error.status == 422
+      assert error.param == "transfer_method"
     end
 
     test "get" do
@@ -199,6 +324,9 @@ defmodule Manza.ResourcesTest do
     # Order matters while recording (five consecutive bad signatures suspend
     # the authorizer), not on replay. Each cassette loads on its own: the
     # authorize cassettes share method + URI.
+    #
+    # The seeded drafts send `transfer_method: "standard"` (MA's base rail,
+    # always offered), so the v2 input signs that rail.
     test "authorize with a bad signature is a validation error" do
       client =
         CassetteReplay.replay_client(["payments/authorize_bad_signature"], ignore_signature: true)
@@ -239,7 +367,8 @@ defmodule Manza.ResourcesTest do
           Manza.TransferAuthorization.payee_for(
             external_account_id: fixture_id("MANZA_FIXTURE_TRUSTED_EXTERNAL_ACCOUNT_ID")
           ),
-          fixture_id("MANZA_FIXTURE_AUTHORIZABLE_CLIENT_REFERENCE")
+          fixture_id("MANZA_FIXTURE_AUTHORIZABLE_CLIENT_REFERENCE"),
+          "standard"
         )
 
       # Replay strips `signature` before matching (it signs the real nonce
@@ -278,7 +407,8 @@ defmodule Manza.ResourcesTest do
           Manza.TransferAuthorization.payee_for(
             external_account_id: fixture_id("MANZA_FIXTURE_EXTERNAL_ACCOUNT_ID")
           ),
-          fixture_id("MANZA_FIXTURE_NEW_PAYEE_CLIENT_REFERENCE")
+          fixture_id("MANZA_FIXTURE_NEW_PAYEE_CLIENT_REFERENCE"),
+          "standard"
         )
 
       assert {:ok, resp} =
@@ -371,6 +501,10 @@ defmodule Manza.ResourcesTest do
             ~w(per_transfer_limit daily_limit daily_authorized_total secret_expires_at webhook_endpoint_id enrolled_at) do
         assert Map.has_key?(resp.body, key), "missing #{key}"
       end
+
+      # "Approve transfers to new payees" is on for the fixture entity (setup step 6).
+      assert resp.body["trust_new_payees"] == true
+      assert is_binary(resp.body["new_payee_limit"])
     end
 
     test "get maps a 404 (none enrolled) to :not_found" do

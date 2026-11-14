@@ -44,8 +44,14 @@ South Africa pass `base_url: "https://za.manza.finance"` (or set
 
 `MANZA_API_KEY`, `MANZA_BASE_URL` and `MANZA_API_VERSION` are read when the
 matching option is not passed. The old `ZAZU_API_KEY`, `ZAZU_BASE_URL` and
-`ZAZU_API_VERSION` names still work for all of 1.x as a fallback and log a
-one-time deprecation warning per variable.
+`ZAZU_API_VERSION` names still work as a fallback (until a later major
+release) and log a one-time deprecation warning per variable.
+
+`api_version:` (or `MANZA_API_VERSION`) pins the `Manza-Version` header.
+Unpinned, the API answers with its current version. manza 2.x signs transfer
+authorizations v2, which the API verifies for unpinned requests and requests
+pinned to `2026-11-13` or later; a client pinned to `2026-03-27` must stay on
+manza 1.x.
 
 ## Resources
 
@@ -54,18 +60,34 @@ one-time deprecation warning per variable.
 | `Manza.Entity` | `get/1` |
 | `Manza.Accounts` | `list/2`, `get/2`, `list_transactions/3`, `get_transaction/3` |
 | `Manza.Customers` | `list/2`, `get/2`, `create/2`, `update/3`, `delete/2` |
-| `Manza.Invoices` | list, get, create, update, send, mark as paid, cancel, credit note, delete, payment link |
+| `Manza.Invoices` | list, get, create, update (`"account_id"` required on create; `"generate_payment_link"` on both), send, mark as paid, cancel, credit note, delete |
 | `Manza.PaymentLinks` | `list/2`, `get/2`, `create/2`, `cancel/2` |
 | `Manza.CheckoutSessions` | `create/2`, `get/2` |
 | `Manza.WebhookEndpoints` | CRUD, enable/disable, test, regenerate secret |
 | `Manza.Beneficiaries` | `list/2`, `get/2`, `create/2`, `list_external_accounts/3`, `get_external_account/3` (`"trusted"` once a trusted payee), `create_external_account/3` |
 | `Manza.PayeeTrustRequests` | `create/2` (`external_account_ids`), `get/2` |
-| `Manza.Payments` | `create/2`, `get/2` (`"authorization"`: `"status"`, `"refusal_reason"`), `authorize/4`, `decline/4` |
-| `Manza.TransferAuthorizer` | `get/1`: `status`, `suspension_reason`, limits, `daily_authorized_total`; `:not_found` when none is enrolled |
+| `Manza.Payments` | `create/2` (optional `"transfer_method"`: `eft`/`rtc` in South Africa, `standard`/`instant` in Morocco), `get/2` (`"authorization"`: `"status"`, `"refusal_reason"`), `authorize/4`, `decline/4` |
+| `Manza.TransferAuthorizer` | `get/1`: `status`, `suspension_reason`, limits, `daily_authorized_total`, `trust_new_payees`, `new_payee_limit`; `:not_found` when none is enrolled |
 | `Manza.Webhook` | `construct_event/4`, `construct_event!/4`, `verify?/5`, `sign/3` (pure, no HTTP) |
 
-`Manza.TransferDrafts` is a deprecated alias of `Manza.Payments`, kept for all
-of 1.x: same functions, and it calls `/api/payments` too.
+`Manza.TransferDrafts` is a deprecated alias of `Manza.Payments`, kept until a
+later major release: same functions, and it calls `/api/payments` too.
+
+```elixir
+# An invoice is paid into one of your accounts; ask for a card payment link,
+# made from that account when the invoice is approved (payment_links:write).
+Manza.Invoices.create(client, %{
+  "customer_id" => customer_id,
+  "account_id" => account_id,
+  "currency_code" => "MAD",
+  "issue_date" => "2026-11-14",
+  "due_date" => "2026-12-14",
+  "generate_payment_link" => true,
+  "items" => [%{"description" => "Consulting", "quantity" => 10, "unit_price" => "150.00"}]
+})
+
+Manza.Invoices.update(client, invoice_id, %{"account_id" => account_id, "generate_payment_link" => false})
+```
 
 ## Machine-authorized transfers
 
@@ -96,7 +118,7 @@ have the full guide.
    Manza.PayeeTrustRequests.create(client, ["01a1..."])
    ```
 
-   `"trusted"` on `Manza.Beneficiaries.get_external_account/3` says which it is. The API does not show whether the option is on.
+   `"trusted"` on `Manza.Beneficiaries.get_external_account/3` says which it is. `"trust_new_payees"` on `Manza.TransferAuthorizer.get/1` says whether the option is on, and `"new_payee_limit"` its limit.
 7. **Run the preflight, then the example** (from `examples/transfer_authorizer/`, after `mix deps.get` and filling in `.env`): `mix preflight` checks what the API shows of steps 1–6 and prints a fix for each that fails. What it cannot see, check by hand: that key B is bound to an IP allowlist, and, for a payee not trusted yet, that *Approve transfers to new payees* is on and key A is bound to an IP allowlist too (it warns, it does not fail). Then `mix authorizer` in one terminal, `mix create_transfer` in another.
 8. **Troubleshooting**: a draft that goes to your approvers instead has an `"authorization"` with status `"refused"` and a `"refusal_reason"` (`mix create_transfer` prints it in words); `Manza.TransferAuthorizer.get/1` shows a suspension and its `"suspension_reason"`. An authorize answered 409 `authorization_busy` (a bank-detail edit, trust or trust revocation on the same payee was in flight) is safe to retry. The reasons, and an API error's `type`, are in the [transfer authorization docs](https://ma.manza.finance/docs/api/transfer-authorization).
 
@@ -127,8 +149,11 @@ endpoint: without the check, anyone holding a captured delivery can replay it.
 ### Signing the challenge
 
 Sign the draft from **your own record** of it with the endpoint's signing
-secret, not from the webhook's `signature_input` (it is there only to compare
-against):
+secret, not from the webhook's `signature_input_v2` (it is there only to
+compare against). The SDK builds the v2 input (`manza.transfer-authorization.v2`),
+which ends with the payment's `transfer_method` (an empty segment when it is
+`nil`). The webhook's `signature_input` is the v1 string, verified only for
+clients pinned to `Manza-Version: 2026-03-27`: those stay on manza 1.x.
 
 ```elixir
 payee = Manza.TransferAuthorization.payee_for(external_account_id: draft["external_account_id"])
@@ -137,7 +162,8 @@ payee = Manza.TransferAuthorization.payee_for(external_account_id: draft["extern
 input =
   Manza.TransferAuthorization.signature_input(
     draft["id"], webhook["data"]["authorization"]["nonce"], draft["amount"],
-    draft["currency_code"], draft["account_id"], payee, draft["client_reference"]
+    draft["currency_code"], draft["account_id"], payee, draft["client_reference"],
+    draft["transfer_method"]  # required; nil signs as ""
   )
 
 signature = Manza.TransferAuthorization.sign(signing_secret, input)
@@ -171,9 +197,13 @@ size is capped at 100 records.
 
 Non-2xx responses come back as `{:error, %Manza.Error{}}` with `status`,
 `kind` (`:authentication`, `:forbidden`, `:not_found`, `:validation` for 400
-and 422, `:conflict` for 409, `:rate_limit`, `:server`, `:api`), the API's
-`type`/`message`/`param`, and the `request_id`. Rate limits carry
-`retry_after`; conflicts carry `payment_id`. Transport failures are
+and any other 422, `:plan_limit_reached` for a 422 whose `type` is
+`plan_limit_reached`, `:conflict` for 409, `:rate_limit`, `:server`, `:api`),
+the API's `type`/`message`/`param`, and the `request_id`. Rate limits carry
+`retry_after`; conflicts carry `payment_id`; a plan limit carries
+`limit_kind` (what is capped, e.g. `"invoices"`), `limit_current` and
+`limit_max`, and retrying it before the plan changes or its period rolls over
+does not help. Transport failures are
 `{:error, %Manza.ConnectionError{}}`; invalid config is
 `{:error, %Manza.ConfigurationError{}}`.
 

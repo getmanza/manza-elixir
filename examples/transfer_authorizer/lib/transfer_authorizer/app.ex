@@ -43,7 +43,8 @@ defmodule TransferAuthorizer.App do
     {"amount", "amount"},
     {"currency_code", "currency_code"},
     {"account_id", "account_id"},
-    {"payee", "payee"}
+    {"payee", "payee"},
+    {"transfer_method", "transfer_method"}
   ]
 
   @attempts 3
@@ -136,7 +137,7 @@ defmodule TransferAuthorizer.App do
           "ledger match for #{client_reference}: #{payment["amount"]} #{payment["currency_code"]} to #{payment["payee"]}"
         )
 
-        authorize(config, entry, authorization, client_reference, data["signature_input"])
+        authorize(config, entry, authorization, client_reference, data["signature_input_v2"])
     end
   rescue
     error -> Logger.error("could not answer the challenge: #{Exception.message(error)}")
@@ -168,8 +169,9 @@ defmodule TransferAuthorizer.App do
     end
   end
 
-  # Sign from the ledger, never from the webhook: `signature_input` in the
-  # webhook is only there to compare against.
+  # Sign from the ledger, never from the webhook: `signature_input_v2` in the
+  # webhook is only there to compare against. (Its `signature_input` is the
+  # v1 string, for clients pinned to Manza-Version 2026-03-27.)
   defp authorize(config, entry, authorization, client_reference, webhook_input) do
     input =
       Manza.TransferAuthorization.signature_input(
@@ -179,7 +181,8 @@ defmodule TransferAuthorizer.App do
         entry["currency_code"],
         entry["account_id"],
         entry["payee"],
-        client_reference
+        client_reference,
+        entry["transfer_method"]
       )
 
     # A signature over a different input is sure to fail, and failed attempts

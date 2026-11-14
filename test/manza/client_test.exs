@@ -212,6 +212,40 @@ defmodule Manza.ClientTest do
       assert error.kind == :conflict
       assert error.payment_id == nil
     end
+
+    # The API's body verbatim (getmanza/app spec/requests/api/invoices_spec.rb).
+    test "422 plan_limit_reached maps to :plan_limit_reached carrying the limit" do
+      error =
+        error_for(422, %{
+          "type" => "plan_limit_reached",
+          "message" => "Plan limit reached for invoices: 10 of 10",
+          "kind" => "invoices",
+          "current" => 10,
+          "max" => 10
+        })
+
+      assert error.status == 422
+      assert error.kind == :plan_limit_reached
+      assert error.type == "plan_limit_reached"
+      assert error.message == "Plan limit reached for invoices: 10 of 10"
+      assert {error.limit_kind, error.limit_current, error.limit_max} == {"invoices", 10, 10}
+    end
+
+    test "any other 422 stays :validation without limit fields" do
+      error =
+        error_for(422, %{
+          "message" => "Customer not found",
+          "type" => "invalid_request_error",
+          "param" => "customer_id",
+          "kind" => "invoices",
+          "current" => 3,
+          "max" => 3
+        })
+
+      assert error.kind == :validation
+      assert error.param == "customer_id"
+      assert {error.limit_kind, error.limit_current, error.limit_max} == {nil, nil, nil}
+    end
   end
 
   test "the default base URL is the production host" do

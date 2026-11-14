@@ -50,7 +50,8 @@ defmodule Mix.Tasks.CreateTransfer do
         "amount" => draft["amount"],
         "currency_code" => draft["currency_code"],
         "account_id" => draft["account_id"],
-        "payee" => payee
+        "payee" => payee,
+        "transfer_method" => draft["transfer_method"]
       })
     rescue
       error ->

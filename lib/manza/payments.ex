@@ -25,9 +25,12 @@ defmodule Manza.Payments do
       `over_daily_limit`, `currency_mismatch`, `suspended` or
       `secret_expired`.
     * `"expired"` / `"superseded"` / `"failed"`: a challenge was sent and
-      closed without an authorize: `expired` (no answer within the hour),
-      `stale` (the draft, its payee's bank details or the endpoint changed
-      while it was open) or `signature_failed` (five invalid signatures).
+      closed without executing the transfer: `expired` (no answer within the
+      hour), `stale` (the draft, its payee's bank details or the endpoint
+      changed while it was open), `signature_failed` (five invalid
+      signatures) or `rail_limit_exceeded` (status `superseded`: the
+      challenge was authorized, but the transfer was over its rail's limit
+      when it executed, so nothing moved).
 
   `"authorization"` is `nil` when no authorizer was enrolled.
 
@@ -50,11 +53,17 @@ defmodule Manza.Payments do
   (own-account move).
 
   Optional attributes: `external_account_id`, `currency_code`,
-  `payment_reference`, `internal_notes`, and `client_reference` (unique per
+  `payment_reference`, `internal_notes`, `client_reference` (unique per
   entity, at most 128 characters; a duplicate returns
   `{:error, %Manza.Error{kind: :conflict}}` whose `payment_id` names the
-  existing draft). The response carries `client_reference` and
-  `authorization` (`%{"id", "status", "expires_at"}` or `nil`).
+  existing draft), and `transfer_method` (the rail: `"eft"` or `"rtc"` in
+  South Africa, `"standard"` or `"instant"` in Morocco; one the market does
+  not offer returns `{:error, %Manza.Error{kind: :validation}}` with `param`
+  `"transfer_method"`, and nothing is created). The response carries
+  `client_reference`, `authorization` (`%{"id", "status", "expires_at"}` or
+  `nil`) and `transfer_method`: the rail sent, the provider's default when
+  left out, `nil` where the market offers no choice. The machine-authorization
+  signature signs it (`Manza.TransferAuthorization.signature_input/8`).
   """
   @spec create(Client.t(), map()) :: {:ok, Manza.Response.t()} | {:error, Exception.t()}
   def create(client, attributes) do
@@ -78,11 +87,16 @@ defmodule Manza.Payments do
 
   Executes the draft. `authorization_id` comes from the
   `payment.authorization_requested` webhook; build `signature` with
-  `Manza.TransferAuthorization`. Requires the `transfers:authorize` scope on a
+  `Manza.TransferAuthorization` (the v2 input, which the API verifies unless
+  the client is pinned to `Manza-Version: 2026-03-27`). Requires the `transfers:authorize` scope on a
   key other than the draft's creator (otherwise 403 `same_key_forbidden`),
   bound to an IP allowlist (otherwise 403 `unrestricted_api_key`). A 409
   `:conflict` with `type` `"authorization_busy"` means a bank-detail edit,
-  trust or trust revocation on the payee was in flight: retry.
+  trust or trust revocation on the payee was in flight: retry. A valid
+  signature on a transfer over its rail's limit returns a 422 `:validation`
+  error (`type` `"state_error"`): nothing moved, the authorization is
+  `superseded` with `refusal_reason` `rail_limit_exceeded`, and the draft went
+  to your approvers.
 
   A blank `signature` is refused locally with
   `{:error, %Manza.ConfigurationError{}}` before any HTTP call: the API counts

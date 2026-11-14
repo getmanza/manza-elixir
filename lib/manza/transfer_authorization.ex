@@ -5,7 +5,7 @@ defmodule Manza.TransferAuthorization do
 
   The `payment.authorization_requested` webhook delivers the authorization id
   and a one-time nonce. Build the signature input from your *own* record of
-  the transfer (not the webhook's `signature_input`, which is there only to
+  the transfer (not the webhook's `signature_input_v2`, which is there only to
   compare against), sign it with the authorizer endpoint's signing secret,
   and pass the result to `Manza.Payments.authorize/4`:
 
@@ -17,24 +17,35 @@ defmodule Manza.TransferAuthorization do
           draft["currency_code"],
           draft["account_id"],
           Manza.TransferAuthorization.payee_for(external_account_id: draft["external_account_id"]),
-          draft["client_reference"]
+          draft["client_reference"],
+          draft["transfer_method"]
         )
 
       signature = Manza.TransferAuthorization.sign(signing_secret, input)
 
       Manza.Payments.authorize(client, draft["id"], authorization_id, signature)
 
+  This is the v2 input, which the API verifies for every request that is
+  unpinned or sends `Manza-Version: 2026-11-13` or later. A client pinned to
+  `Manza-Version: 2026-03-27` must sign v1 and stays on manza 1.x.
+
   Argument errors raise `ArgumentError`: these are programming mistakes, not
   API outcomes.
   """
 
-  @signature_version "manza.transfer-authorization.v1"
+  @signature_version "manza.transfer-authorization.v2"
 
   @doc """
-  Builds `manza.transfer-authorization.v1|<payment_id>|<nonce>|<amount>|<currency_code>|<account_id>|<payee>|<client_reference>`.
+  Builds `manza.transfer-authorization.v2|<payment_id>|<nonce>|<amount>|<currency_code>|<account_id>|<payee>|<client_reference>|<transfer_method>`.
 
   `amount` must be the API's decimal string verbatim (e.g. `"2500.0"`).
-  `client_reference` is empty when the transfer has none.
+  `client_reference` is signed as an empty segment when the transfer has none
+  (`nil`). `transfer_method` is the payment's rail as the API stores it (the
+  create response's `"transfer_method"`), signed as an empty segment when it
+  is `nil` (a market with no rail choice). Both are required arguments, `nil`
+  included: a 1.x seven-argument call warns at compile time and raises
+  `UndefinedFunctionError` before any request, instead of signing its
+  `client_reference` as the `transfer_method`.
   """
   @spec signature_input(
           String.t(),
@@ -43,6 +54,7 @@ defmodule Manza.TransferAuthorization do
           String.t(),
           String.t(),
           String.t(),
+          String.t() | nil,
           String.t() | nil
         ) :: String.t()
   def signature_input(
@@ -52,7 +64,8 @@ defmodule Manza.TransferAuthorization do
         currency_code,
         account_id,
         payee,
-        client_reference \\ nil
+        client_reference,
+        transfer_method
       ) do
     unless is_binary(amount) do
       raise ArgumentError, "amount must be the API's decimal string (got #{inspect(amount)})"
@@ -67,7 +80,8 @@ defmodule Manza.TransferAuthorization do
         currency_code,
         account_id,
         payee,
-        client_reference || ""
+        client_reference || "",
+        transfer_method || ""
       ],
       "|"
     )
