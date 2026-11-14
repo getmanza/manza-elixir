@@ -177,7 +177,7 @@ defmodule TransferAuthorizer.AppTest do
       assert log =~ "req_123"
     end
 
-    test "signs the webhook's v2 input" do
+    test "builds the webhook's v2 signature input from the ledger" do
       input =
         Manza.TransferAuthorization.signature_input(
           @entry["payment_id"],

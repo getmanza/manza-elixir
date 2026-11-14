@@ -9,8 +9,8 @@ defmodule TransferAuthorizer.Ledger do
                        "currency_code" => "MAD", "account_id" => "...",
                        "payee" => "ext:...", "transfer_method" => "standard"}}
 
-  `"transfer_method"` is the create response's (`nil` where the market
-  offers no choice): the v2 signature signs it.
+  `"transfer_method"` is the value in the create response (`nil` where the
+  market offers no choice): the v2 signature signs it.
   """
 
   # How long a writer waits for another one to finish.
